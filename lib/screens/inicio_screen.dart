@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/materia.dart';
 import '../providers/materias_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/formulario_materia.dart';
 import '../widgets/materia_card.dart';
 import 'detalle_materia_screen.dart';
@@ -44,6 +45,46 @@ class _InicioScreenState extends State<InicioScreen> {
           materia.apuntes
               .any((apunte) => apunte.titulo.toLowerCase().contains(busqueda));
     }).toList();
+  }
+
+  /// Abre la hoja con las opciones "Editar" y "Borrar" de una materia real.
+  Future<void> _mostrarOpciones(Materia materia) async {
+    final accion = await showModalBottomSheet<_AccionMateria>(
+      context: context,
+      builder: (contextHoja) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('opcion-editar-materia'),
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Editar'),
+              onTap: () => Navigator.pop(contextHoja, _AccionMateria.editar),
+            ),
+            ListTile(
+              key: const Key('opcion-borrar-materia'),
+              leading: const Icon(Icons.delete_outline_rounded),
+              title: const Text('Borrar'),
+              onTap: () => Navigator.pop(contextHoja, _AccionMateria.borrar),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || accion == null) return;
+
+    switch (accion) {
+      case _AccionMateria.editar:
+        await mostrarFormularioMateria(context, materia: materia);
+      case _AccionMateria.borrar:
+        final provider = context.read<MateriasProvider>();
+        final confirmado = await confirmarBorrado(
+          context,
+          titulo: 'Borrar materia',
+          mensaje: mensajeBorradoMateria(materia.nombre, materia.apuntes.length),
+        );
+        if (confirmado) await provider.borrarMateria(materia.id);
+    }
   }
 
   @override
@@ -238,6 +279,7 @@ class _InicioScreenState extends State<InicioScreen> {
                       for (final materia in materias)
                         MateriaCard(
                           materia: materia,
+                          onLongPress: () => _mostrarOpciones(materia),
                           onTap: () {
                             Navigator.push(
                               context,
@@ -258,6 +300,9 @@ class _InicioScreenState extends State<InicioScreen> {
     );
   }
 }
+
+/// Acciones disponibles al mantener pulsada una materia.
+enum _AccionMateria { editar, borrar }
 
 /// Estado vacío de Inicio: invita a crear la primera materia.
 class _EstadoVacio extends StatelessWidget {

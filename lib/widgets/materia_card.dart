@@ -12,10 +12,14 @@ class MateriaCard extends StatelessWidget {
   /// Callback ejecutado cuando el usuario presiona la tarjeta.
   final VoidCallback onTap;
 
+  /// Callback opcional ejecutado al mantener presionada la tarjeta.
+  final VoidCallback? onLongPress;
+
   const MateriaCard({
     super.key,
     required this.materia,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -48,6 +52,7 @@ class MateriaCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(22),
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
