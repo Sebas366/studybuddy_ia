@@ -18,6 +18,7 @@ abstract class MateriasRepository {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   });
 
   /// Cambia los datos de una materia existente.
@@ -27,6 +28,7 @@ abstract class MateriasRepository {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   });
 
   /// Borra la materia y todos sus apuntes.

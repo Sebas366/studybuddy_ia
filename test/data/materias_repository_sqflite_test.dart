@@ -29,6 +29,7 @@ void main() {
       descripcion: '',
       colorIndice: 0,
       iconoClave: 'libro',
+      semestre: '2026-2',
     );
     return materia.id;
   }
@@ -39,6 +40,7 @@ void main() {
       descripcion: 'Protocolos',
       colorIndice: 2,
       iconoClave: 'red',
+      semestre: '2026-2',
     );
 
     expect(materia.nombre, 'Redes');
@@ -86,6 +88,7 @@ void main() {
       descripcion: 'Descripción nueva',
       colorIndice: 4,
       iconoClave: 'codigo',
+      semestre: '2026-2',
     );
 
     final materia = (await repositorio.obtenerMaterias()).single;
@@ -159,6 +162,7 @@ void main() {
       descripcion: '',
       colorIndice: 1,
       iconoClave: 'red',
+      semestre: '2026-2',
     );
     await primera.crearApunte(
       materiaId: materia.id,
@@ -319,7 +323,7 @@ void main() {
       'descripcion': '',
       'color_indice': 1,
       'icono_clave': 'red',
-      'creada': 1000,
+      'creada': DateTime(2026, 3, 10, 12).millisecondsSinceEpoch,
     });
     await dbVieja.insert('apuntes', {
       'id': 'apu_viejo',
@@ -336,6 +340,7 @@ void main() {
 
     final materias = await actualizada.obtenerMaterias();
     expect(materias.single.nombre, 'Materia de la v1');
+    expect(materias.single.semestre, '2026-1'); // enero-junio: semestre 1
     expect(materias.single.apuntes.single.titulo, 'Apunte de la v1');
 
     await actualizada.registrarSesionEnfoque(
@@ -343,6 +348,128 @@ void main() {
       inicio: DateTime(2026, 10, 27, 9),
       duracionSegundos: 1500,
     );
+    expect(await actualizada.obtenerSesionesEnfoque(), hasLength(1));
+  });
+
+  group('semestre', () {
+    test('crea una materia con su semestre y lo devuelve al leer', () async {
+      final creada = await repositorio.crearMateria(
+        nombre: 'Redes',
+        descripcion: '',
+        colorIndice: 0,
+        iconoClave: 'libro',
+        semestre: '2026-2',
+      );
+
+      expect(creada.semestre, '2026-2');
+      expect((await repositorio.obtenerMaterias()).single.semestre, '2026-2');
+    });
+
+    test('actualiza el semestre de una materia', () async {
+      final id = await crearMateriaBasica('A');
+
+      await repositorio.actualizarMateria(
+        id: id,
+        nombre: 'A',
+        descripcion: '',
+        colorIndice: 0,
+        iconoClave: 'libro',
+        semestre: '2025-1',
+      );
+
+      expect((await repositorio.obtenerMaterias()).single.semestre, '2025-1');
+    });
+  });
+
+  test('actualizar desde la versión 2 asigna el semestre por fecha de creación y conserva todo', () async {
+    final directorio = Directory.systemTemp.createTempSync('studybuddy_test_');
+    addTearDown(() => directorio.deleteSync(recursive: true));
+    final ruta = p.join(directorio.path, 'v2.db');
+
+    // Base como la dejó la Parte 2 (versión 2, sin la columna semestre).
+    final dbVieja = await databaseFactoryFfi.openDatabase(
+      ruta,
+      options: OpenDatabaseOptions(
+        version: 2,
+        onCreate: (db, version) async {
+          await db.execute('''
+              CREATE TABLE materias (
+                id TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                color_indice INTEGER NOT NULL,
+                icono_clave TEXT NOT NULL,
+                creada INTEGER NOT NULL
+              )
+            ''');
+          await db.execute('''
+              CREATE TABLE apuntes (
+                id TEXT PRIMARY KEY,
+                materia_id TEXT NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
+                titulo TEXT NOT NULL,
+                contenido TEXT NOT NULL,
+                creada INTEGER NOT NULL,
+                modificada INTEGER NOT NULL
+              )
+            ''');
+          await db.execute('''
+              CREATE TABLE sesiones_enfoque (
+                id TEXT PRIMARY KEY,
+                materia_id TEXT,
+                inicio INTEGER NOT NULL,
+                duracion_segundos INTEGER NOT NULL
+              )
+            ''');
+          await db.execute('''
+              CREATE TABLE intentos_quiz (
+                id TEXT PRIMARY KEY,
+                materia_id TEXT NOT NULL,
+                aciertos INTEGER NOT NULL,
+                total INTEGER NOT NULL,
+                fecha INTEGER NOT NULL
+              )
+            ''');
+        },
+      ),
+    );
+    Future<void> insertarMateria(String id, String nombre, DateTime creada) {
+      return dbVieja.insert('materias', {
+        'id': id,
+        'nombre': nombre,
+        'descripcion': '',
+        'color_indice': 0,
+        'icono_clave': 'libro',
+        'creada': creada.millisecondsSinceEpoch,
+      });
+    }
+
+    await insertarMateria('mat_marzo', 'Marzo', DateTime(2026, 3, 10, 12));
+    await insertarMateria('mat_octubre', 'Octubre', DateTime(2026, 10, 10, 12));
+    await dbVieja.insert('apuntes', {
+      'id': 'apu_1',
+      'materia_id': 'mat_octubre',
+      'titulo': 'Apunte viejo',
+      'contenido': 'texto',
+      'creada': 1,
+      'modificada': 1,
+    });
+    await dbVieja.insert('sesiones_enfoque', {
+      'id': 'ses_1',
+      'materia_id': 'mat_octubre',
+      'inicio': DateTime(2026, 10, 11, 9).millisecondsSinceEpoch,
+      'duracion_segundos': 1500,
+    });
+    await dbVieja.close();
+
+    final actualizada = await MateriasRepositorySqflite.abrir(ruta: ruta);
+    addTearDown(actualizada.cerrar);
+
+    final materias = {
+      for (final m in await actualizada.obtenerMaterias()) m.nombre: m,
+    };
+    expect(materias['Marzo']!.semestre, '2026-1');
+    expect(materias['Octubre']!.semestre, '2026-2');
+    expect(materias['Octubre']!.apuntes.single.titulo, 'Apunte viejo');
     expect(await actualizada.obtenerSesionesEnfoque(), hasLength(1));
   });
 }
