@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:studybuddy_ia/services/notificador_pomodoro.dart';
 
 /// Notificador de pruebas: no muestra nada, solo registra lo que se le pide.
@@ -11,9 +13,13 @@ class NotificadorFalso implements NotificadorPomodoro {
   /// Cuántas veces se canceló el aviso.
   int cancelaciones = 0;
 
+  /// Si no es nulo, `pedirPermisos` espera a que se complete (simula el diálogo abierto).
+  Completer<void>? permisoPendiente;
+
   @override
   Future<void> pedirPermisos() async {
     permisosPedidos++;
+    await permisoPendiente?.future;
   }
 
   @override

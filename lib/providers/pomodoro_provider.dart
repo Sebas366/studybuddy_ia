@@ -177,12 +177,20 @@ class PomodoroProvider extends ChangeNotifier {
     _arrancarTemporizador();
     notifyListeners();
     await _guardarEstado();
-    if (!_permisosPedidos) {
-      _permisosPedidos = true;
-      await _notificador.pedirPermisos();
-    }
-    // Si mientras tanto se pausó o reinició, ya no hay nada que programar.
+    // La alarma se programa sin esperar el permiso: si el diálogo sigue abierto,
+    // el bloque no puede terminar sin tener su aviso listo.
     if (_corriendo && _fin == fin) await _programarAviso();
+    unawaited(prepararAvisos());
+  }
+
+  /// Pide el permiso de notificaciones, una sola vez por sesión de la app.
+  ///
+  /// Se llama al abrir la pantalla del Pomodoro, para que el diálogo no
+  /// interrumpa un bloque ya iniciado.
+  Future<void> prepararAvisos() async {
+    if (_permisosPedidos) return;
+    _permisosPedidos = true;
+    await _notificador.pedirPermisos();
   }
 
   /// Vuelve al inicio del modo actual, detenido.

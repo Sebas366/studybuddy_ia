@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:studybuddy_ia/providers/materias_provider.dart';
+import 'package:studybuddy_ia/providers/pomodoro_provider.dart';
 import 'package:studybuddy_ia/main.dart';
 import 'package:studybuddy_ia/services/notificador_pomodoro.dart';
 
@@ -56,4 +59,30 @@ void simularBarraDeNavegacion(WidgetTester tester, {double alto = 120}) {
   tester.view.viewPadding = FakeViewPadding(bottom: alto);
   addTearDown(tester.view.resetPadding);
   addTearDown(tester.view.resetViewPadding);
+}
+
+/// Monta una pantalla suelta dentro de un `MaterialApp` con los providers que usa
+/// el detalle de una materia (materias y Pomodoro), sin pasar por toda la app.
+Widget conProveedoresDePrueba(Widget pantalla) {
+  final repositorio = RepositorioMemoria();
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider(
+        create: (_) => MateriasProvider(repositorio)..cargar(),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => PomodoroProvider(
+          repositorio: repositorio,
+          notificador: const NotificadorNulo(),
+          registrarSesion:
+              ({
+                String? materiaId,
+                required DateTime inicio,
+                required int duracionSegundos,
+              }) async => true,
+        ),
+      ),
+    ],
+    child: MaterialApp(home: pantalla),
+  );
 }

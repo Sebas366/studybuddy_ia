@@ -203,4 +203,39 @@ void main() {
       expect(find.textContaining('Ya hay un Pomodoro en curso'), findsNothing);
     },
   );
+
+  testWidgets('Al abrir la pantalla se piden los permisos una sola vez, no al iniciar',
+      (tester) async {
+    await abrir(tester);
+    expect(notificador.permisosPedidos, 0);
+
+    await abrirPomodoroDe(tester, 'Redes');
+    expect(notificador.permisosPedidos, 1);
+
+    await tester.tap(find.byKey(iniciar));
+    await tester.pump();
+    expect(notificador.permisosPedidos, 1);
+  });
+
+  testWidgets('La tarjeta del Pomodoro muestra la duración real del bloque',
+      (tester) async {
+    await abrir(tester);
+    await tester.tap(find.text('Redes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sesión de 15 s'), findsOneWidget);
+    expect(find.text('Sesión de 25 min'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('modo-demo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Inicio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Redes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sesión de 25 min'), findsOneWidget);
+  });
 }

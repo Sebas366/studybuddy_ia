@@ -28,18 +28,17 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   void initState() {
     super.initState();
     final materia = widget.materia;
-    if (materia != null) {
-      // Se hace después del primer cuadro: no se puede notificar durante la construcción.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          // El provider lo ignora si ya hay un bloque activo (de esta u otra materia).
-          context.read<PomodoroProvider>().seleccionarMateria(
-            materia.id,
-            materia.nombre,
-          );
-        }
-      });
-    }
+    // Se hace después del primer cuadro: no se puede notificar durante la construcción.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final pomodoro = context.read<PomodoroProvider>();
+      if (materia != null) {
+        // El provider lo ignora si ya hay un bloque activo (de esta u otra materia).
+        pomodoro.seleccionarMateria(materia.id, materia.nombre);
+      }
+      // Se pide el permiso aquí, y no al iniciar, para no interrumpir el bloque.
+      pomodoro.prepararAvisos();
+    });
   }
 
   @override

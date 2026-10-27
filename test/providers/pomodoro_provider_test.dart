@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studybuddy_ia/models/modo_pomodoro.dart';
 import 'package:studybuddy_ia/providers/pomodoro_provider.dart';
@@ -402,4 +404,36 @@ void main() {
       liberar();
     },
   );
+
+  testWidgets(
+    'el aviso se programa sin esperar la respuesta del permiso de notificaciones',
+    (tester) async {
+      final permiso = Completer<void>();
+      notificador.permisoPendiente = permiso; // el diálogo sigue abierto
+      final provider = nuevo();
+
+      unawaited(provider.alternar());
+      await tester.pump();
+
+      expect(notificador.programadas, hasLength(1));
+      expect(
+        notificador.programadas.single.fin,
+        inicio.add(const Duration(seconds: 15)),
+      );
+      permiso.complete();
+      await tester.pump();
+      liberar();
+    },
+  );
+
+  testWidgets('prepararAvisos pide los permisos una sola vez', (tester) async {
+    final provider = nuevo();
+
+    await provider.prepararAvisos();
+    await provider.prepararAvisos();
+    await provider.alternar();
+
+    expect(notificador.permisosPedidos, 1);
+    liberar();
+  });
 }
