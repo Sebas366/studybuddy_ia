@@ -100,7 +100,7 @@ void main() {
     await tester.tap(find.byKey(botonGuardarMateria));
     await tester.pump();
 
-    repositorio.compuerta.complete();
+    repositorio.compuertaMaterias.complete();
     await tester.pumpAndSettle();
 
     expect(await repositorio.obtenerMaterias(), hasLength(1));

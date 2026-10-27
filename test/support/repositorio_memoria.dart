@@ -147,13 +147,16 @@ class RepositorioMemoria implements MateriasRepository {
   }
 }
 
-/// Repositorio en memoria cuyas altas esperan a que la prueba abra la [compuerta].
+/// Repositorio en memoria cuyas altas esperan a que la prueba abra una compuerta.
 ///
 /// Permite simular un guardado lento para comprobar qué pasa si el usuario
 /// vuelve a tocar "Guardar" mientras el primer guardado sigue en curso.
 class RepositorioLento extends RepositorioMemoria {
-  /// Las altas de materias y apuntes quedan detenidas hasta que se complete.
-  final Completer<void> compuerta = Completer<void>();
+  /// Las altas de materias quedan detenidas hasta que se complete.
+  final Completer<void> compuertaMaterias = Completer<void>();
+
+  /// Las altas de apuntes quedan detenidas hasta que se complete.
+  final Completer<void> compuertaApuntes = Completer<void>();
 
   @override
   Future<Materia> crearMateria({
@@ -162,7 +165,7 @@ class RepositorioLento extends RepositorioMemoria {
     required int colorIndice,
     required String iconoClave,
   }) async {
-    await compuerta.future;
+    await compuertaMaterias.future;
     return super.crearMateria(
       nombre: nombre,
       descripcion: descripcion,
@@ -177,7 +180,7 @@ class RepositorioLento extends RepositorioMemoria {
     required String titulo,
     required String contenido,
   }) async {
-    await compuerta.future;
+    await compuertaApuntes.future;
     return super.crearApunte(
       materiaId: materiaId,
       titulo: titulo,
