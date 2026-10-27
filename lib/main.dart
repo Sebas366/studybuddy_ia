@@ -5,8 +5,11 @@ import 'data/materias_repository.dart';
 import 'data/materias_repository_sqflite.dart';
 import 'providers/estadisticas_provider.dart';
 import 'providers/materias_provider.dart';
+import 'providers/pomodoro_provider.dart';
 import 'screens/error_base_datos_screen.dart';
 import 'screens/main_shell.dart';
+import 'services/notificador_local.dart';
+import 'services/notificador_pomodoro.dart';
 import 'theme/app_theme.dart';
 
 /// Punto de entrada principal de la aplicación StudyBuddy IA.
@@ -23,9 +26,20 @@ Future<void> main() async {
 Future<void> _iniciar() async {
   try {
     final repositorio = await MateriasRepositorySqflite.abrir();
-    runApp(StudyBuddyApp(repositorio: repositorio));
+    final notificador = await _crearNotificador();
+    runApp(StudyBuddyApp(repositorio: repositorio, notificador: notificador));
   } catch (_) {
     runApp(ErrorBaseDatosApp(onReintentar: _iniciar));
+  }
+}
+
+/// Crea el notificador real; si el sistema no lo permite, usa uno que no hace nada
+/// (el Pomodoro funciona igual, solo que sin aviso al terminar).
+Future<NotificadorPomodoro> _crearNotificador() async {
+  try {
+    return await NotificadorLocal.crear();
+  } catch (_) {
+    return const NotificadorNulo();
   }
 }
 
@@ -39,7 +53,18 @@ class StudyBuddyApp extends StatelessWidget {
   /// Almacenamiento de materias y apuntes (SQLite en la app, memoria en pruebas).
   final MateriasRepository repositorio;
 
-  const StudyBuddyApp({super.key, required this.repositorio});
+  /// Aviso al terminar cada bloque de Pomodoro (alarma del sistema en la app real).
+  final NotificadorPomodoro notificador;
+
+  /// Reloj de la app; las pruebas lo reemplazan por uno simulado.
+  final DateTime Function() ahora;
+
+  const StudyBuddyApp({
+    super.key,
+    required this.repositorio,
+    this.notificador = const NotificadorNulo(),
+    this.ahora = DateTime.now,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +81,18 @@ class StudyBuddyApp extends StatelessWidget {
             estadisticas!.sincronizarConMaterias(materias.materias);
             return estadisticas;
           },
+        ),
+        // El Pomodoro vive aquí para que siga corriendo al salir de su pantalla.
+        ChangeNotifierProvider<PomodoroProvider>(
+          lazy: false,
+          create: (context) => PomodoroProvider(
+            repositorio: repositorio,
+            notificador: notificador,
+            registrarSesion: context
+                .read<EstadisticasProvider>()
+                .registrarSesionEnfoque,
+            ahora: ahora,
+          )..restaurar(),
         ),
       ],
       child: _RefrescarAlReanudar(
@@ -112,6 +149,7 @@ class _RefrescarAlReanudarState extends State<_RefrescarAlReanudar>
   void didChangeAppLifecycleState(AppLifecycleState estado) {
     if (estado == AppLifecycleState.resumed) {
       context.read<EstadisticasProvider>().cargar();
+      context.read<PomodoroProvider>().alReanudarApp();
     }
   }
 
