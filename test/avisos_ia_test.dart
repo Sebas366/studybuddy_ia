@@ -83,6 +83,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('El contenido del apunte no queda bajo la barra de navegación',
+      (WidgetTester tester) async {
+    await entrarAlDetalle(tester,
+        tituloApunte: 'Apunte largo', contenidoApunte: 'línea de prueba ' * 320);
+    await tester.tap(find.text('Apunte largo'));
+    await tester.pumpAndSettle();
+
+    tester.view.physicalSize = const Size(400, 600);
+    simularBarraDeNavegacion(tester, alto: 120);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -20000));
+    await tester.pumpAndSettle();
+
+    final inferior = tester.getBottomLeft(find.text('Copiar')).dy;
+    expect(inferior, lessThanOrEqualTo(600 - 120));
+  });
+
   testWidgets('Copiar pone título, materia y texto en el portapapeles',
       (WidgetTester tester) async {
     String? copiado;

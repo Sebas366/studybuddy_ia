@@ -76,6 +76,27 @@ void main() {
     expect((await repositorio.obtenerMaterias()).single.apuntes, isEmpty);
   });
 
+  testWidgets('El botón Guardar apunte no queda bajo la barra de navegación',
+      (WidgetTester tester) async {
+    final repositorio = RepositorioMemoria();
+    await sembrarMateria(repositorio, 'Redes');
+    await abrirApp(tester, repositorio);
+    await tester.tap(find.text('Redes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(botonNuevoApunte));
+    await tester.pumpAndSettle();
+
+    // Pantalla chica: el formulario hace scroll; al final, el botón debe verse entero.
+    tester.view.physicalSize = const Size(400, 400);
+    simularBarraDeNavegacion(tester, alto: 120);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    final inferior = tester.getBottomLeft(find.byKey(botonGuardarApunte)).dy;
+    expect(inferior, lessThanOrEqualTo(400 - 120));
+  });
+
   testWidgets('Doble toque en Guardar crea un solo apunte',
       (WidgetTester tester) async {
     final repositorio = RepositorioLento();

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/apunte.dart';
 import '../providers/materias_provider.dart';
 import '../utils/validadores.dart';
@@ -39,9 +40,12 @@ class _FormularioApunteScreenState extends State<FormularioApunteScreen> {
   @override
   void initState() {
     super.initState();
-    _controladorTitulo = TextEditingController(text: widget.apunte?.titulo ?? '');
-    _controladorTexto =
-        TextEditingController(text: widget.apunte?.contenido ?? '');
+    _controladorTitulo = TextEditingController(
+      text: widget.apunte?.titulo ?? '',
+    );
+    _controladorTexto = TextEditingController(
+      text: widget.apunte?.contenido ?? '',
+    );
   }
 
   @override
@@ -94,50 +98,53 @@ class _FormularioApunteScreenState extends State<FormularioApunteScreen> {
       appBar: AppBar(
         title: Text(_esEdicion ? 'Editar apunte' : 'Nuevo apunte'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                key: const Key('campo-titulo-apunte'),
-                controller: _controladorTitulo,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.next,
-                validator: validarTituloApunte,
-                decoration: const InputDecoration(
-                  labelText: 'Título',
-                  hintText: 'Ej. DHCP y proceso DORA',
-                  prefixIcon: Icon(Icons.title_rounded),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  key: const Key('campo-titulo-apunte'),
+                  controller: _controladorTitulo,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  validator: validarTituloApunte,
+                  decoration: const InputDecoration(
+                    labelText: 'Título',
+                    hintText: 'Ej. DHCP y proceso DORA',
+                    prefixIcon: Icon(Icons.title_rounded),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                key: const Key('campo-texto-apunte'),
-                controller: _controladorTexto,
-                textCapitalization: TextCapitalization.sentences,
-                keyboardType: TextInputType.multiline,
-                minLines: 8,
-                maxLines: null,
-                validator: validarTextoApunte,
-                decoration: const InputDecoration(
-                  labelText: 'Texto del apunte',
-                  alignLabelWithHint: true,
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const Key('campo-texto-apunte'),
+                  controller: _controladorTexto,
+                  textCapitalization: TextCapitalization.sentences,
+                  keyboardType: TextInputType.multiline,
+                  minLines: 8,
+                  maxLines: null,
+                  validator: validarTextoApunte,
+                  decoration: const InputDecoration(
+                    labelText: 'Texto del apunte',
+                    alignLabelWithHint: true,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  key: const Key('guardar-apunte'),
-                  onPressed: _guardar,
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Guardar apunte'),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    key: const Key('guardar-apunte'),
+                    onPressed: _guardar,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Guardar apunte'),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -106,6 +106,19 @@ void main() {
     expect(await repositorio.obtenerMaterias(), hasLength(1));
   });
 
+  testWidgets('El botón Guardar queda por encima de la barra de navegación',
+      (WidgetTester tester) async {
+    simularBarraDeNavegacion(tester, alto: 120);
+    await abrirApp(tester, RepositorioMemoria());
+
+    await tester.tap(find.byKey(botonCrearPrimera));
+    await tester.pumpAndSettle();
+
+    // Viewport de 1400 px de alto: el botón no puede invadir los últimos 120.
+    final inferior = tester.getBottomLeft(find.byKey(botonGuardarMateria)).dy;
+    expect(inferior, lessThanOrEqualTo(1400 - 120));
+  });
+
   testWidgets('Navegación entre pestañas del NavigationBar',
       (WidgetTester tester) async {
     await abrirApp(tester, RepositorioMemoria());

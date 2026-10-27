@@ -32,3 +32,13 @@ Future<String> sembrarMateria(
   );
   return materia.id;
 }
+
+/// Simula la barra de navegación del sistema (Android) con [alto] píxeles abajo.
+///
+/// Restablece los valores originales al terminar la prueba.
+void simularBarraDeNavegacion(WidgetTester tester, {double alto = 120}) {
+  tester.view.padding = FakeViewPadding(bottom: alto);
+  tester.view.viewPadding = FakeViewPadding(bottom: alto);
+  addTearDown(tester.view.resetPadding);
+  addTearDown(tester.view.resetViewPadding);
+}

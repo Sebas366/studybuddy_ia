@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../data/catalogo_materia.dart';
 import '../models/materia.dart';
 import '../providers/materias_provider.dart';
@@ -48,8 +49,9 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
     super.initState();
     final materia = widget.materia;
     _controladorNombre = TextEditingController(text: materia?.nombre ?? '');
-    _controladorDescripcion =
-        TextEditingController(text: materia?.descripcion ?? '');
+    _controladorDescripcion = TextEditingController(
+      text: materia?.descripcion ?? '',
+    );
     _colorIndice = materia?.colorIndice ?? 0;
     _iconoClave = materia?.iconoClave ?? CatalogoMateria.iconoPorDefecto;
   }
@@ -102,9 +104,11 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
     navegador.pop();
     mensajero.showSnackBar(
       SnackBar(
-        content: Text(_esEdicion
-            ? '¡Materia "$nombre" actualizada!'
-            : '¡Materia "$nombre" creada!'),
+        content: Text(
+          _esEdicion
+              ? '¡Materia "$nombre" actualizada!'
+              : '¡Materia "$nombre" creada!',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -119,10 +123,17 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
       color: esOscuro ? Colors.white70 : Colors.black54,
     );
 
+    final medidas = MediaQuery.of(context);
+    // Con el teclado abierto ya se respeta su altura; si no, se deja libre la
+    // barra de navegación del sistema para que no tape el botón "Guardar".
+    final margenSistema = medidas.viewInsets.bottom > 0
+        ? 0.0
+        : medidas.padding.bottom;
+
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: medidas.viewInsets.bottom),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + margenSistema),
         decoration: BoxDecoration(
           color: esOscuro ? const Color(0xFF23202B) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -204,9 +215,9 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
                         key: Key('icono-${entrada.key}'),
                         icono: entrada.value,
                         seleccionado: entrada.key == _iconoClave,
-                        colorAcento: CatalogoMateria
-                            .degradadoPorIndice(_colorIndice)
-                            .first,
+                        colorAcento: CatalogoMateria.degradadoPorIndice(
+                          _colorIndice,
+                        ).first,
                         onTap: () => setState(() => _iconoClave = entrada.key),
                       ),
                   ],
@@ -217,8 +228,12 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
                   child: ElevatedButton.icon(
                     key: const Key('guardar-materia'),
                     onPressed: _guardar,
-                    icon: Icon(_esEdicion ? Icons.check_rounded : Icons.add_rounded),
-                    label: Text(_esEdicion ? 'Guardar cambios' : 'Guardar materia'),
+                    icon: Icon(
+                      _esEdicion ? Icons.check_rounded : Icons.add_rounded,
+                    ),
+                    label: Text(
+                      _esEdicion ? 'Guardar cambios' : 'Guardar materia',
+                    ),
                   ),
                 ),
               ],
@@ -299,7 +314,9 @@ class _OpcionIcono extends StatelessWidget {
           color: seleccionado
               ? colorAcento.withValues(alpha: 0.2)
               : Colors.grey.withValues(alpha: 0.12),
-          border: seleccionado ? Border.all(color: colorAcento, width: 2) : null,
+          border: seleccionado
+              ? Border.all(color: colorAcento, width: 2)
+              : null,
         ),
         child: Icon(icono, color: seleccionado ? colorAcento : Colors.grey),
       ),
