@@ -147,9 +147,18 @@ class _RefrescarAlReanudarState extends State<_RefrescarAlReanudar>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState estado) {
-    if (estado == AppLifecycleState.resumed) {
-      context.read<EstadisticasProvider>().cargar();
-      context.read<PomodoroProvider>().alReanudarApp();
+    final pomodoro = context.read<PomodoroProvider>();
+    switch (estado) {
+      case AppLifecycleState.resumed:
+        pomodoro.definirPrimerPlano(true);
+        context.read<EstadisticasProvider>().cargar();
+        pomodoro.alReanudarApp();
+      case AppLifecycleState.paused ||
+          AppLifecycleState.hidden ||
+          AppLifecycleState.detached:
+        pomodoro.definirPrimerPlano(false);
+      case AppLifecycleState.inactive:
+        break; // transitorio (p. ej. al bajar el panel de notificaciones)
     }
   }
 

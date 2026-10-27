@@ -436,4 +436,97 @@ void main() {
     expect(notificador.permisosPedidos, 1);
     liberar();
   });
+
+  testWidgets(
+    'si el bloque termina con la app en primer plano se descarta el aviso',
+    (tester) async {
+      final provider = nuevo();
+      await provider.alternar();
+      final antes = notificador.cancelaciones;
+
+      await pasar(tester, const Duration(seconds: 20));
+
+      expect(sesiones, hasLength(1));
+      expect(notificador.cancelaciones, antes + 1);
+      liberar();
+    },
+  );
+
+  testWidgets(
+    'si el bloque termina con la app en segundo plano el aviso se conserva',
+    (tester) async {
+      final provider = nuevo();
+      await provider.alternar();
+      provider.definirPrimerPlano(false);
+      final antes = notificador.cancelaciones;
+
+      await pasar(tester, const Duration(seconds: 20));
+
+      expect(sesiones, hasLength(1));
+      expect(notificador.cancelaciones, antes);
+
+      // Al volver a primer plano, el aviso se descarta.
+      provider.definirPrimerPlano(true);
+      await provider.alReanudarApp();
+      expect(notificador.cancelaciones, antes + 1);
+      liberar();
+    },
+  );
+
+  testWidgets(
+    'iniciar el siguiente bloque mientras se registra la sesión no borra su estado',
+    (tester) async {
+      final compuerta = Completer<void>();
+      final provider = PomodoroProvider(
+        repositorio: repositorio,
+        notificador: notificador,
+        registrarSesion:
+            ({
+              String? materiaId,
+              required DateTime inicio,
+              required int duracionSegundos,
+            }) async {
+              await compuerta.future; // registrar la sesión tarda
+              return true;
+            },
+        ahora: reloj.call,
+      );
+      creados.add(provider);
+
+      await provider.alternar();
+      await pasar(
+        tester,
+        const Duration(seconds: 15),
+      ); // termina; la sesión queda pendiente
+      expect(provider.corriendo, isFalse);
+
+      await provider.alternar(); // el usuario inicia el descanso enseguida
+      expect(provider.corriendo, isTrue);
+
+      compuerta.complete();
+      await tester.pump();
+      await tester.pump();
+
+      final estado = await repositorio.obtenerPomodoroEnCurso();
+      expect(estado, isNotNull);
+      expect(estado!.corriendo, isTrue);
+      expect(estado.modo, ModoPomodoro.descansoCorto);
+      liberar();
+    },
+  );
+
+  testWidgets('un tick y volver a la app a la vez registran una sola sesión', (
+    tester,
+  ) async {
+    final provider = nuevo();
+    await provider.alternar();
+
+    reloj.avanzar(const Duration(seconds: 20));
+    unawaited(provider.alReanudarApp());
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(sesiones, hasLength(1));
+    liberar();
+  });
 }

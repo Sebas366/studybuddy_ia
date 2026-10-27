@@ -55,6 +55,8 @@ no hay ningún aviso al terminar, y si Android cierra la app el bloque en curso 
 - **[Decisión de Claude]** La alarma se programa **antes** de pedir el permiso de notificaciones (no espera la
   respuesta del diálogo), y el permiso se pide al abrir la pantalla del Pomodoro: con bloques de 15 s, el bloque
   terminaba con el diálogo aún abierto y quedaba sin aviso.
+- **[Decisión de Claude]** Si un bloque termina con la app **a la vista**, el aviso se descarta de inmediato (la
+  pantalla ya muestra el cambio); solo suena y vibra cuando la app está en segundo plano. Se vio en la revisión.
 - **[Decisión de Claude]** Al volver a la app se descarta la notificación (para detener la vibración) y, si hay un
   bloque corriendo, se reprograma su alarma.
 

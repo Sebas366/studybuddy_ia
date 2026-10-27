@@ -52,6 +52,10 @@ class PomodoroProvider extends ChangeNotifier {
   bool _permisosPedidos = false;
   bool _liberado = false;
 
+  /// `true` mientras la app está a la vista; se usa para no dejar sonando el aviso
+  /// de un bloque que terminó delante del usuario.
+  bool _enPrimerPlano = true;
+
   /// Modo del bloque actual.
   ModoPomodoro get modo => _modo;
 
@@ -134,6 +138,11 @@ class PomodoroProvider extends ChangeNotifier {
       // Si no se puede leer lo guardado, la app arranca con un Pomodoro limpio.
       notifyListeners();
     }
+  }
+
+  /// Avisa si la app está a la vista (`true`) o en segundo plano (`false`).
+  void definirPrimerPlano(bool enPrimerPlano) {
+    _enPrimerPlano = enPrimerPlano;
   }
 
   /// Se llama al volver la app a primer plano.
@@ -286,6 +295,10 @@ class PomodoroProvider extends ChangeNotifier {
     _segundosRestantes = _segundosTotales;
     notifyListeners();
 
+    // Si el bloque terminó con la app a la vista, la pantalla ya lo muestra: no
+    // hace falta que el aviso siga sonando y vibrando hasta el minuto.
+    if (_enPrimerPlano) unawaited(_notificador.cancelar());
+
     if (eraEnfoque) {
       await _registrarSesion(
         materiaId: _materiaId,
@@ -293,7 +306,9 @@ class PomodoroProvider extends ChangeNotifier {
         duracionSegundos: duracion,
       );
     }
-    await _borrarEstado();
+    // Si mientras se registraba la sesión el usuario ya inició otro bloque, el
+    // estado guardado es el del bloque nuevo y no se debe borrar.
+    if (!_corriendo) await _borrarEstado();
   }
 
   Future<void> _programarAviso() async {
