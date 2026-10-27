@@ -122,4 +122,28 @@ void main() {
       expect(proveedor.sesiones, hasLength(1));
     },
   );
+
+  test(
+    'una recarga lenta no pisa los datos de una recarga más nueva',
+    () async {
+      final repositorio = RepositorioLecturaLenta();
+      final proveedor = EstadisticasProvider(repositorio);
+      await proveedor.cargar();
+
+      final compuerta = repositorio.retenerProximaLectura();
+      final recargaVieja = proveedor
+          .cargar(); // toma la foto vacía y se queda esperando
+      await pumpEventQueue();
+      await repositorio.registrarSesionEnfoque(
+        inicio: inicio,
+        duracionSegundos: 1500,
+      );
+      await proveedor.cargar(); // recarga más nueva: ve la sesión
+
+      compuerta.complete();
+      await recargaVieja;
+
+      expect(proveedor.sesiones, hasLength(1));
+    },
+  );
 }

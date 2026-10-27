@@ -22,6 +22,9 @@ class EstadisticasProvider extends ChangeNotifier {
   bool _cargando = true;
   String? _error;
 
+  /// Número de la última recarga iniciada; una recarga vieja no pisa a una más nueva.
+  int _generacion = 0;
+
   /// Conjunto de ids de materias visto en la última sincronización.
   Set<String>? _idsMaterias;
 
@@ -39,11 +42,16 @@ class EstadisticasProvider extends ChangeNotifier {
 
   /// Lee sesiones e intentos del repositorio y notifica a los oyentes.
   Future<void> cargar() async {
+    final miGeneracion = ++_generacion;
     try {
-      _sesiones = await _repositorio.obtenerSesionesEnfoque();
-      _intentos = await _repositorio.obtenerIntentosQuiz();
+      final sesiones = await _repositorio.obtenerSesionesEnfoque();
+      final intentos = await _repositorio.obtenerIntentosQuiz();
+      if (miGeneracion != _generacion) return; // ya hay una recarga más nueva
+      _sesiones = sesiones;
+      _intentos = intentos;
       _error = null;
     } catch (_) {
+      if (miGeneracion != _generacion) return;
       _error = 'No se pudieron cargar tus estadísticas.';
     }
     _cargando = false;

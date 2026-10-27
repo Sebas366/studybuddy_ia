@@ -21,6 +21,9 @@ class MateriasProvider extends ChangeNotifier {
   bool _cargando = true;
   String? _error;
 
+  /// Número de la última recarga iniciada; una recarga vieja no pisa a una más nueva.
+  int _generacion = 0;
+
   /// Materias reales, la más nueva primero (lista no modificable).
   List<Materia> get materias => UnmodifiableListView(_materias);
 
@@ -36,10 +39,14 @@ class MateriasProvider extends ChangeNotifier {
   /// ofrezca reintentar. Así, un guardado que ya se completó no se reporta
   /// como fallido solo porque la recarga posterior falló.
   Future<void> cargar() async {
+    final miGeneracion = ++_generacion;
     try {
-      _materias = await _repositorio.obtenerMaterias();
+      final materias = await _repositorio.obtenerMaterias();
+      if (miGeneracion != _generacion) return; // ya hay una recarga más nueva
+      _materias = materias;
       _error = null;
     } catch (_) {
+      if (miGeneracion != _generacion) return;
       _error = 'No se pudieron cargar tus materias.';
     }
     _cargando = false;

@@ -309,3 +309,31 @@ class RepositorioInestable extends RepositorioMemoria {
     );
   }
 }
+
+/// Repositorio en memoria cuya próxima lectura se entrega tarde, a voluntad de la prueba.
+///
+/// La lectura retenida toma su "foto" de los datos en el momento de empezar y
+/// la devuelve cuando la prueba completa la compuerta; sirve para simular una
+/// recarga lenta que termina después de otra más nueva.
+class RepositorioLecturaLenta extends RepositorioMemoria {
+  Completer<void>? _retenida;
+
+  /// La próxima lectura de materias o sesiones queda en espera hasta completar lo devuelto.
+  Completer<void> retenerProximaLectura() => _retenida = Completer<void>();
+
+  Future<T> _conRetencion<T>(Future<T> foto) async {
+    final resultado = await foto;
+    final compuerta = _retenida;
+    _retenida = null;
+    if (compuerta != null) await compuerta.future;
+    return resultado;
+  }
+
+  @override
+  Future<List<Materia>> obtenerMaterias() =>
+      _conRetencion(super.obtenerMaterias());
+
+  @override
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque() =>
+      _conRetencion(super.obtenerSesionesEnfoque());
+}
