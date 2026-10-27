@@ -4,8 +4,10 @@ import '../models/apunte.dart';
 import '../models/materia.dart';
 import '../providers/materias_provider.dart';
 import '../widgets/accion_card.dart';
+import '../widgets/aviso_ia_fase3.dart';
 import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/formulario_materia.dart';
+import 'apunte_screen.dart';
 import 'formulario_apunte_screen.dart';
 import 'resumen_ia_screen.dart';
 import 'quiz_screen.dart';
@@ -348,6 +350,10 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                           icono: Icons.auto_awesome_rounded,
                           colorTema: const Color(0xFF6750A4),
                           onTap: () {
+                            if (!materia.esDemo) {
+                              mostrarAvisoIaFase3(context);
+                              return;
+                            }
                             if (materia.apuntes.isNotEmpty) {
                               Navigator.push(
                                 context,
@@ -372,10 +378,16 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                         // Acción 2: Quiz IA
                         AccionCard(
                           titulo: 'Quiz IA',
-                          subtitulo: '${materia.preguntas.length} preguntas',
+                          subtitulo: materia.esDemo
+                              ? '${materia.preguntas.length} preguntas'
+                              : 'Próximamente',
                           icono: Icons.quiz_rounded,
                           colorTema: const Color(0xFFE65100),
                           onTap: () {
+                            if (!materia.esDemo) {
+                              mostrarAvisoIaFase3(context);
+                              return;
+                            }
                             if (materia.preguntas.isNotEmpty) {
                               Navigator.push(
                                 context,
@@ -402,6 +414,10 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                           icono: Icons.support_agent_rounded,
                           colorTema: const Color(0xFF00897B),
                           onTap: () {
+                            if (!materia.esDemo) {
+                              mostrarAvisoIaFase3(context);
+                              return;
+                            }
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -563,20 +579,24 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                               Icons.chevron_right_rounded,
                               size: 20,
                             ),
-                            // Los apuntes reales abren su propia pantalla en la Tarea 9
-                            onTap: materia.esDemo
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => ResumenIaScreen(
+                            // Los apuntes de demostración abren el resumen simulado;
+                            // los reales, su texto con el aviso de IA.
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => materia.esDemo
+                                      ? ResumenIaScreen(
+                                          apunte: apunte,
+                                          materia: materia,
+                                        )
+                                      : ApunteScreen(
                                           apunte: apunte,
                                           materia: materia,
                                         ),
-                                      ),
-                                    );
-                                  }
-                                : null,
+                                ),
+                              );
+                            },
                             onLongPress: materia.esDemo
                                 ? null
                                 : () => _mostrarOpcionesApunte(apunte),
