@@ -7,6 +7,7 @@ App móvil de estudio asistido por IA, desarrollada en Flutter como proyecto fin
 > - **Fase 1 (completa): mockups.** Interfaz completa y navegable con datos de demostración, sin lógica real ni IA.
 > - **Fase 2, parte 1 (completa): materias y apuntes reales con persistencia local.** Puedes crear, editar y borrar tus propias materias y apuntes, y siguen ahí al cerrar y reabrir la app (base de datos SQLite en el dispositivo).
 > - **Fase 2, parte 2 (completa): Pomodoro, quiz y estadísticas reales.** Cada bloque de enfoque que termina se guarda como sesión de estudio (el temporizador sigue la hora real: si la pantalla se apaga, el bloque se completa y se guarda al volver a la app; si Android cierra la app mientras tanto, ese bloque se pierde), cada quiz terminado guarda su resultado, y **Stats** e **Inicio** (racha) muestran tus números reales. Cada sesión cuenta para el día en que **termina** el bloque.
+> - **Materias por semestre:** cada materia tiene su semestre (ej. `2026-2`) y Inicio muestra uno a la vez, con un selector y la opción "Todos". El buscador revisa todos los semestres.
 > - **Todavía con datos de demostración:** la pestaña **Plan** (sesiones de hoy y próximo parcial) y las 3 materias de ejemplo.
 > - **Todavía sin IA (Fase 3):** el resumen, las ideas clave, el quiz y el tutor muestran el aviso "Disponible en la Fase 3" en tus materias reales; por eso el quiz solo se puede jugar en las materias de ejemplo y el "% dominado" sigue oculto. No hay llamadas a ningún modelo de IA ni backend.
 >
@@ -17,7 +18,7 @@ App móvil de estudio asistido por IA, desarrollada en Flutter como proyecto fin
 | Sección | Pantalla | Descripción |
 |---|---|---|
 | Navegación principal | `main_shell` | Barra inferior con 4 pestañas: Inicio, Plan, Stats y Perfil |
-| Inicio | `inicio_screen` | Saludo, estado vacío con botón para crear la primera materia, buscador y lista de tus materias (mantén pulsada una tarjeta para editar o borrar) |
+| Inicio | `inicio_screen` | Saludo, racha, estado vacío con botón para crear la primera materia, buscador, selector de semestre y lista de tus materias (mantén pulsada una tarjeta para editar o borrar) |
 | Materia | `detalle_materia_screen` | Herramientas de estudio (Resumir, Quiz IA, Tutor IA, Pomodoro, Escanear), lista de apuntes y menú para editar o borrar la materia |
 | Apuntes | `formulario_apunte_screen` / `apunte_screen` | Crear, editar y leer un apunte real; el espacio de la IA muestra el aviso de la Fase 3 |
 | IA (demostración) | `resumen_ia_screen`, `quiz_screen`, `resultados_quiz_screen`, `chat_tutor_screen` | Pantallas simuladas que siguen disponibles en las materias de ejemplo |
@@ -39,15 +40,15 @@ App móvil de estudio asistido por IA, desarrollada en Flutter como proyecto fin
 ```
 lib/
 ├── main.dart          # Punto de entrada: abre la base de datos y monta la app
-├── data/              # Repositorio SQLite (esquema v2), catálogo de colores/iconos y datos de demostración
+├── data/              # Repositorio SQLite (esquema v3), catálogo de colores/iconos y datos de demostración
 ├── models/            # Materia, Apunte, Pregunta, MensajeChat, SesionEstudio
 ├── providers/         # MateriasProvider y EstadisticasProvider
 ├── screens/           # Pantallas de la app
 ├── theme/             # Colores y temas claro/oscuro
-├── utils/             # Fechas, validaciones y cálculos de estadísticas (racha, horas por día)
+├── utils/             # Fechas, validaciones, semestres y cálculos de estadísticas (racha, horas por día)
 └── widgets/           # Componentes reutilizables
 test/                  # Pruebas de widgets, del provider y del repositorio SQLite
-docs/superpowers/      # Diseño y plan de implementación de la Fase 2 (partes 1 y 2)
+docs/superpowers/      # Diseño y plan de implementación (Fase 2 y materias por semestre)
 ```
 
 ## Cómo ejecutarlo
