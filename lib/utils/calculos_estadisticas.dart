@@ -80,10 +80,12 @@ int segundosTotales(List<SesionEnfoque> sesiones, {String? materiaId}) {
       .fold<int>(0, (suma, sesion) => suma + sesion.duracionSegundos);
 }
 
-/// Formatea segundos como `0 min`, `45 min`, `1 h` o `2 h 30 min`.
+/// Formatea segundos como `0 min`, `15 s`, `45 min`, `1 h` o `2 h 30 min`.
 ///
-/// Los minutos se redondean hacia abajo.
+/// Menos de un minuto se muestra en segundos; desde un minuto, los minutos se
+/// redondean hacia abajo.
 String formatearDuracion(int segundos) {
+  if (segundos > 0 && segundos < 60) return '$segundos s';
   final minutosTotales = segundos ~/ 60;
   final horas = minutosTotales ~/ 60;
   final minutos = minutosTotales % 60;

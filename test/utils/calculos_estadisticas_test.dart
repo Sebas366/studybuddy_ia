@@ -167,7 +167,9 @@ void main() {
   group('formatearDuracion', () {
     test('formatea minutos y horas', () {
       expect(formatearDuracion(0), '0 min');
-      expect(formatearDuracion(59), '0 min');
+      expect(formatearDuracion(15), '15 s');
+      expect(formatearDuracion(59), '59 s');
+      expect(formatearDuracion(60), '1 min');
       expect(formatearDuracion(2700), '45 min');
       expect(formatearDuracion(3600), '1 h');
       expect(formatearDuracion(9000), '2 h 30 min');
