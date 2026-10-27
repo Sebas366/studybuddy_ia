@@ -182,14 +182,15 @@ void main() {
     await tester.tap(find.text('Pomodoro'));
     await tester.pumpAndSettle();
 
-    expect(find.text('25:00'), findsOneWidget);
+    // El modo demostración (bloques cortos) viene activado por defecto.
+    expect(find.text('00:15'), findsOneWidget);
     expect(find.text('Enfoque'), findsOneWidget);
     expect(find.text('Descanso Corto'), findsOneWidget);
     expect(find.text('Descanso Largo'), findsOneWidget);
 
     await tester.tap(find.text('Descanso Corto'));
     await tester.pumpAndSettle();
-    expect(find.text('05:00'), findsOneWidget);
+    expect(find.text('00:05'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
