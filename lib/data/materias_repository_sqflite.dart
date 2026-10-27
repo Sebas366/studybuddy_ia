@@ -3,8 +3,10 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/apunte.dart';
+import '../models/estado_pomodoro.dart';
 import '../models/intento_quiz.dart';
 import '../models/materia.dart';
+import '../models/modo_pomodoro.dart';
 import '../models/sesion_enfoque.dart';
 import '../utils/formato_fecha.dart';
 import 'catalogo_materia.dart';
@@ -31,7 +33,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
     final rutaFinal = ruta ?? p.join(await getDatabasesPath(), 'studybuddy.db');
     final db = await openDatabase(
       rutaFinal,
-      version: 3,
+      version: 4,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -56,10 +58,12 @@ class MateriasRepositorySqflite implements MateriasRepository {
           )
         ''');
         await _crearTablasVersion2(db);
+        await _crearTablasVersion4(db);
       },
       onUpgrade: (db, versionAnterior, versionNueva) async {
         if (versionAnterior < 2) await _crearTablasVersion2(db);
         if (versionAnterior < 3) await _agregarSemestreVersion3(db);
+        if (versionAnterior < 4) await _crearTablasVersion4(db);
       },
     );
     return MateriasRepositorySqflite._(db);
@@ -85,6 +89,29 @@ class MateriasRepositorySqflite implements MateriasRepository {
         aciertos INTEGER NOT NULL,
         total INTEGER NOT NULL,
         fecha INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  /// Crea las tablas de la versión 4: el Pomodoro en curso (un solo registro) y los ajustes.
+  static Future<void> _crearTablasVersion4(Database db) async {
+    await db.execute('''
+      CREATE TABLE pomodoro_en_curso (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        modo TEXT NOT NULL,
+        corriendo INTEGER NOT NULL,
+        fin INTEGER,
+        segundos_restantes INTEGER NOT NULL,
+        segundos_totales INTEGER NOT NULL,
+        ciclos INTEGER NOT NULL,
+        materia_id TEXT,
+        materia_nombre TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE ajustes (
+        clave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL
       )
     ''');
   }
@@ -347,5 +374,62 @@ class MateriasRepositorySqflite implements MateriasRepository {
       orderBy: 'fecha DESC, rowid DESC',
     );
     return filas.map(_intentoDesdeFila).toList();
+  }
+
+  @override
+  Future<EstadoPomodoro?> obtenerPomodoroEnCurso() async {
+    final filas = await _db.query('pomodoro_en_curso', limit: 1);
+    if (filas.isEmpty) return null;
+    final fila = filas.single;
+    final fin = fila['fin'] as int?;
+    return EstadoPomodoro(
+      modo: ModoPomodoro.values.byName(fila['modo'] as String),
+      corriendo: (fila['corriendo'] as int) == 1,
+      fin: fin == null ? null : DateTime.fromMillisecondsSinceEpoch(fin),
+      segundosRestantes: fila['segundos_restantes'] as int,
+      segundosTotales: fila['segundos_totales'] as int,
+      ciclos: fila['ciclos'] as int,
+      materiaId: fila['materia_id'] as String?,
+      materiaNombre: fila['materia_nombre'] as String?,
+    );
+  }
+
+  @override
+  Future<void> guardarPomodoroEnCurso(EstadoPomodoro estado) async {
+    await _db.insert('pomodoro_en_curso', {
+      'id': 1,
+      'modo': estado.modo.name,
+      'corriendo': estado.corriendo ? 1 : 0,
+      'fin': estado.fin?.millisecondsSinceEpoch,
+      'segundos_restantes': estado.segundosRestantes,
+      'segundos_totales': estado.segundosTotales,
+      'ciclos': estado.ciclos,
+      'materia_id': estado.materiaId,
+      'materia_nombre': estado.materiaNombre,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  @override
+  Future<void> borrarPomodoroEnCurso() async {
+    await _db.delete('pomodoro_en_curso');
+  }
+
+  @override
+  Future<String?> obtenerAjuste(String clave) async {
+    final filas = await _db.query(
+      'ajustes',
+      where: 'clave = ?',
+      whereArgs: [clave],
+      limit: 1,
+    );
+    return filas.isEmpty ? null : filas.single['valor'] as String;
+  }
+
+  @override
+  Future<void> guardarAjuste(String clave, String valor) async {
+    await _db.insert('ajustes', {
+      'clave': clave,
+      'valor': valor,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }

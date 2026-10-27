@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/pomodoro_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 
@@ -192,6 +194,50 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         },
                       );
                     },
+                  ),
+
+                  Divider(
+                    height: 1,
+                    indent: 64,
+                    color: esOscuro
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.06),
+                  ),
+
+                  // Switch del modo demostración: bloques de Pomodoro cortos
+                  Consumer<PomodoroProvider>(
+                    builder: (context, pomodoro, _) => SwitchListTile(
+                      key: const Key('modo-demo'),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 4),
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00897B)
+                              .withValues(alpha: esOscuro ? 0.25 : 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.speed_rounded,
+                          color: Color(0xFF00897B),
+                        ),
+                      ),
+                      title: Text(
+                        'Modo demostración',
+                        style: tema.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Bloques cortos: 15 s de enfoque, 5 s de descanso y 10 s de descanso largo, para mostrar la app.',
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: esOscuro ? Colors.white60 : Colors.black54,
+                        ),
+                      ),
+                      activeThumbColor: const Color(0xFF00897B),
+                      value: pomodoro.modoDemo,
+                      onChanged: pomodoro.alternarModoDemo,
+                    ),
                   ),
 
                   Divider(

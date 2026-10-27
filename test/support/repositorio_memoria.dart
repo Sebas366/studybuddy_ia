@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:studybuddy_ia/data/catalogo_materia.dart';
 import 'package:studybuddy_ia/data/materias_repository.dart';
 import 'package:studybuddy_ia/models/apunte.dart';
+import 'package:studybuddy_ia/models/estado_pomodoro.dart';
 import 'package:studybuddy_ia/models/intento_quiz.dart';
 import 'package:studybuddy_ia/models/materia.dart';
 import 'package:studybuddy_ia/models/sesion_enfoque.dart';
@@ -41,6 +42,10 @@ class RepositorioMemoria implements MateriasRepository {
   /// Sesiones e intentos en orden de registro (el más viejo primero).
   final List<SesionEnfoque> _sesiones = [];
   final List<IntentoQuiz> _intentos = [];
+
+  /// Bloque de Pomodoro en curso y ajustes de la app.
+  EstadoPomodoro? _pomodoroEnCurso;
+  final Map<String, String> _ajustes = {};
   int _contador = 0;
 
   String _nuevoId(String prefijo) => '${prefijo}_${_contador++}';
@@ -214,6 +219,27 @@ class RepositorioMemoria implements MateriasRepository {
       return porFecha != 0 ? porFecha : b.compareTo(a);
     });
     return [for (final i in indices) _intentos[i]];
+  }
+
+  @override
+  Future<EstadoPomodoro?> obtenerPomodoroEnCurso() async => _pomodoroEnCurso;
+
+  @override
+  Future<void> guardarPomodoroEnCurso(EstadoPomodoro estado) async {
+    _pomodoroEnCurso = estado;
+  }
+
+  @override
+  Future<void> borrarPomodoroEnCurso() async {
+    _pomodoroEnCurso = null;
+  }
+
+  @override
+  Future<String?> obtenerAjuste(String clave) async => _ajustes[clave];
+
+  @override
+  Future<void> guardarAjuste(String clave, String valor) async {
+    _ajustes[clave] = valor;
   }
 }
 

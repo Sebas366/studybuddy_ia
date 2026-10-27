@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 import 'package:studybuddy_ia/data/datos_demo.dart';
-import 'package:studybuddy_ia/providers/materias_provider.dart';
 import 'package:studybuddy_ia/screens/detalle_materia_screen.dart';
 import 'package:studybuddy_ia/utils/formato_fecha.dart';
 
@@ -210,11 +208,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => MateriasProvider(RepositorioMemoria())..cargar(),
-        child: MaterialApp(
-          home: DetalleMateriaScreen(materia: DatosDemo.materias.first),
-        ),
+      conProveedoresDePrueba(
+        DetalleMateriaScreen(materia: DatosDemo.materias.first),
       ),
     );
     await tester.pumpAndSettle();

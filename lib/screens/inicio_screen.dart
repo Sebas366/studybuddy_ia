@@ -4,12 +4,15 @@ import 'package:provider/provider.dart';
 import '../models/materia.dart';
 import '../providers/estadisticas_provider.dart';
 import '../providers/materias_provider.dart';
+import '../providers/pomodoro_provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/calculos_estadisticas.dart';
+import '../utils/formato_tiempo.dart';
 import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/formulario_materia.dart';
 import '../widgets/materia_card.dart';
 import 'detalle_materia_screen.dart';
+import 'pomodoro_screen.dart';
 
 /// Pantalla de Inicio principal de StudyBuddy IA.
 ///
@@ -247,6 +250,22 @@ class _InicioScreenState extends State<InicioScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  // --- POMODORO EN CURSO (solo si hay un bloque activo) ---
+                  Consumer<PomodoroProvider>(
+                    builder: (context, pomodoro, _) {
+                      if (!pomodoro.hayBloqueActivo) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _PastillaPomodoro(
+                          corriendo: pomodoro.corriendo,
+                          segundosRestantes: pomodoro.segundosRestantes,
+                        ),
+                      );
+                    },
+                  ),
+
                   // --- TARJETA DE RACHA DE ESTUDIO (solo si hay racha) ---
                   if (racha >= 1) ...[
                     _TarjetaRacha(dias: racha),
@@ -453,6 +472,57 @@ class _SelectorSemestre extends StatelessWidget {
               color: AppColors.primario,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pastilla que avisa que hay un Pomodoro activo y lleva a su pantalla al tocarla.
+class _PastillaPomodoro extends StatelessWidget {
+  final bool corriendo;
+  final int segundosRestantes;
+
+  const _PastillaPomodoro({
+    required this.corriendo,
+    required this.segundosRestantes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final esOscuro = Theme.of(context).brightness == Brightness.dark;
+    final estado = corriendo ? 'en curso' : 'en pausa';
+
+    return Material(
+      color: AppColors.primario.withValues(alpha: esOscuro ? 0.25 : 0.12),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        key: const Key('pastilla-pomodoro'),
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PomodoroScreen()),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '🍅 Pomodoro $estado · ${formatearCronometro(segundosRestantes)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primario,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: AppColors.primario,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -180,7 +180,7 @@ class EstadisticasScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Total de ${formatearHoras(totalSemana)} horas esta semana',
+                            'Total de ${formatearTiempoSemanal(totalSemana)} esta semana',
                             style: tema.textTheme.bodySmall?.copyWith(
                               color: esOscuro ? Colors.white60 : Colors.black54,
                             ),
@@ -201,7 +201,7 @@ class EstadisticasScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          'Pico: ${nombresDiasCortos[indicePico]} (${formatearHoras(horasSemana[indicePico])} h)',
+                          'Pico: ${nombresDiasCortos[indicePico]} (${formatearPico(horasSemana[indicePico])})',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -429,7 +429,7 @@ class EstadisticasScreen extends StatelessWidget {
       children: [
         // Etiqueta con las horas encima de la barra
         Text(
-          '${formatearHoras(horas)}h',
+          etiquetaBarra(horas),
           style: TextStyle(
             fontSize: 10,
             fontWeight: esPico ? FontWeight.bold : FontWeight.w500,

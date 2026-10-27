@@ -1,22 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:studybuddy_ia/providers/materias_provider.dart';
+import 'package:studybuddy_ia/providers/pomodoro_provider.dart';
 import 'package:studybuddy_ia/main.dart';
+import 'package:studybuddy_ia/services/notificador_pomodoro.dart';
 
 import 'repositorio_memoria.dart';
 
 /// Monta [StudyBuddyApp] con el [repositorio] dado, simulando un smartphone.
 ///
 /// Configura el viewport (800x1400, ratio 1.0) y espera a que termine la carga inicial.
+/// Con [notificador] y [ahora] se pueden observar los avisos del Pomodoro y simular el reloj.
 Future<void> abrirApp(
   WidgetTester tester,
-  RepositorioMemoria repositorio,
-) async {
+  RepositorioMemoria repositorio, {
+  NotificadorPomodoro? notificador,
+  DateTime Function()? ahora,
+}) async {
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  await tester.pumpWidget(StudyBuddyApp(repositorio: repositorio));
+  await tester.pumpWidget(
+    StudyBuddyApp(
+      repositorio: repositorio,
+      notificador: notificador ?? const NotificadorNulo(),
+      ahora: ahora ?? DateTime.now,
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -46,4 +59,30 @@ void simularBarraDeNavegacion(WidgetTester tester, {double alto = 120}) {
   tester.view.viewPadding = FakeViewPadding(bottom: alto);
   addTearDown(tester.view.resetPadding);
   addTearDown(tester.view.resetViewPadding);
+}
+
+/// Monta una pantalla suelta dentro de un `MaterialApp` con los providers que usa
+/// el detalle de una materia (materias y Pomodoro), sin pasar por toda la app.
+Widget conProveedoresDePrueba(Widget pantalla) {
+  final repositorio = RepositorioMemoria();
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider(
+        create: (_) => MateriasProvider(repositorio)..cargar(),
+      ),
+      ChangeNotifierProvider(
+        create: (_) => PomodoroProvider(
+          repositorio: repositorio,
+          notificador: const NotificadorNulo(),
+          registrarSesion:
+              ({
+                String? materiaId,
+                required DateTime inicio,
+                required int duracionSegundos,
+              }) async => true,
+        ),
+      ),
+    ],
+    child: MaterialApp(home: pantalla),
+  );
 }

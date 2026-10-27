@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/apunte.dart';
 import '../models/materia.dart';
+import '../models/modo_pomodoro.dart';
 import '../providers/materias_provider.dart';
+import '../providers/pomodoro_provider.dart';
+import '../utils/calculos_estadisticas.dart';
 import '../widgets/accion_card.dart';
 import '../widgets/aviso_ia_fase3.dart';
 import '../widgets/dialogo_confirmar_borrado.dart';
@@ -126,6 +129,8 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
+    // Solo se reconstruye si cambia el modo demostración (no en cada segundo del Pomodoro).
+    final modoDemo = context.select<PomodoroProvider, bool>((p) => p.modoDemo);
 
     // Las materias reales se leen en vivo; si ya no existen, se cierra la pantalla.
     var materia = widget.materia;
@@ -431,7 +436,8 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                         // Acción 4: Pomodoro
                         AccionCard(
                           titulo: 'Pomodoro',
-                          subtitulo: 'Sesión de 25 min',
+                          subtitulo:
+                              'Sesión de ${formatearDuracion(ModoPomodoro.enfoque.segundos(demo: modoDemo))}',
                           icono: Icons.timer_rounded,
                           colorTema: const Color(0xFFD81B60),
                           onTap: () {

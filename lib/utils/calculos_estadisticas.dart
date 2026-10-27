@@ -80,10 +80,12 @@ int segundosTotales(List<SesionEnfoque> sesiones, {String? materiaId}) {
       .fold<int>(0, (suma, sesion) => suma + sesion.duracionSegundos);
 }
 
-/// Formatea segundos como `0 min`, `45 min`, `1 h` o `2 h 30 min`.
+/// Formatea segundos como `0 min`, `15 s`, `45 min`, `1 h` o `2 h 30 min`.
 ///
-/// Los minutos se redondean hacia abajo.
+/// Menos de un minuto se muestra en segundos; desde un minuto, los minutos se
+/// redondean hacia abajo.
 String formatearDuracion(int segundos) {
+  if (segundos > 0 && segundos < 60) return '$segundos s';
   final minutosTotales = segundos ~/ 60;
   final horas = minutosTotales ~/ 60;
   final minutos = minutosTotales % 60;
@@ -111,4 +113,33 @@ IntentoQuiz? mejorIntento(List<IntentoQuiz> intentos, String materiaId) {
     }
   }
   return mejor;
+}
+
+/// Segundos que representan [horas] (para decidir si se muestra en horas o menos).
+int _segundosDe(double horas) => (horas * 3600).round();
+
+/// Total de la semana: en horas si llega a una hora; si no, en minutos o segundos.
+///
+/// Con cero queda `0 horas`.
+String formatearTiempoSemanal(double horas) {
+  final segundos = _segundosDe(horas);
+  if (segundos == 0) return '0 horas';
+  if (segundos < 3600) return formatearDuracion(segundos);
+  return '${formatearHoras(horas)} horas';
+}
+
+/// Valor del día pico: `1.5 h` desde una hora; antes de eso, minutos o segundos.
+String formatearPico(double horas) {
+  final segundos = _segundosDe(horas);
+  if (segundos < 3600) return formatearDuracion(segundos);
+  return '${formatearHoras(horas)} h';
+}
+
+/// Etiqueta corta sobre cada barra: `1.5h`, `12m`, `45s` o `0h`.
+String etiquetaBarra(double horas) {
+  final segundos = _segundosDe(horas);
+  if (segundos == 0) return '0h';
+  if (segundos < 60) return '${segundos}s';
+  if (segundos < 3600) return '${segundos ~/ 60}m';
+  return '${formatearHoras(horas)}h';
 }

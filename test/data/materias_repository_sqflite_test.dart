@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:studybuddy_ia/data/materias_repository_sqflite.dart';
+import 'package:studybuddy_ia/models/estado_pomodoro.dart';
+import 'package:studybuddy_ia/models/modo_pomodoro.dart';
 
 void main() {
   setUpAll(() {
@@ -472,4 +474,204 @@ void main() {
     expect(materias['Octubre']!.apuntes.single.titulo, 'Apunte viejo');
     expect(await actualizada.obtenerSesionesEnfoque(), hasLength(1));
   });
+
+  group('pomodoro en curso y ajustes', () {
+    final fin = DateTime(2026, 10, 28, 9, 30, 15);
+    EstadoPomodoro corriendo() => EstadoPomodoro(
+      modo: ModoPomodoro.enfoque,
+      corriendo: true,
+      fin: fin,
+      segundosRestantes: 10,
+      segundosTotales: 15,
+      ciclos: 2,
+      materiaId: 'mat_1',
+      materiaNombre: 'Redes',
+    );
+
+    test('sin registro devuelve null', () async {
+      expect(await repositorio.obtenerPomodoroEnCurso(), isNull);
+    });
+
+    test('guarda y lee un estado corriendo con todos sus campos', () async {
+      await repositorio.guardarPomodoroEnCurso(corriendo());
+
+      final leido = (await repositorio.obtenerPomodoroEnCurso())!;
+      expect(leido.modo, ModoPomodoro.enfoque);
+      expect(leido.corriendo, isTrue);
+      expect(leido.fin, fin);
+      expect(leido.segundosRestantes, 10);
+      expect(leido.segundosTotales, 15);
+      expect(leido.ciclos, 2);
+      expect(leido.materiaId, 'mat_1');
+      expect(leido.materiaNombre, 'Redes');
+    });
+
+    test(
+      'guardar otro estado reemplaza al anterior (un solo registro)',
+      () async {
+        await repositorio.guardarPomodoroEnCurso(corriendo());
+        await repositorio.guardarPomodoroEnCurso(
+          const EstadoPomodoro(
+            modo: ModoPomodoro.descansoCorto,
+            corriendo: false,
+            segundosRestantes: 3,
+            segundosTotales: 5,
+            ciclos: 1,
+          ),
+        );
+
+        final leido = (await repositorio.obtenerPomodoroEnCurso())!;
+        expect(leido.modo, ModoPomodoro.descansoCorto);
+        expect(leido.corriendo, isFalse);
+        expect(leido.fin, isNull);
+        expect(leido.materiaId, isNull);
+        expect(leido.materiaNombre, isNull);
+        final filas = await repositorio.baseDatos.rawQuery(
+          'SELECT COUNT(*) AS n FROM pomodoro_en_curso',
+        );
+        expect(filas.single['n'], 1);
+      },
+    );
+
+    test('borrarPomodoroEnCurso lo elimina', () async {
+      await repositorio.guardarPomodoroEnCurso(corriendo());
+
+      await repositorio.borrarPomodoroEnCurso();
+
+      expect(await repositorio.obtenerPomodoroEnCurso(), isNull);
+    });
+
+    test('los ajustes se guardan y se reemplazan', () async {
+      expect(await repositorio.obtenerAjuste('modo_demo'), isNull);
+
+      await repositorio.guardarAjuste('modo_demo', '1');
+      expect(await repositorio.obtenerAjuste('modo_demo'), '1');
+
+      await repositorio.guardarAjuste('modo_demo', '0');
+      expect(await repositorio.obtenerAjuste('modo_demo'), '0');
+    });
+
+    test('el estado y los ajustes sobreviven a cerrar y reabrir', () async {
+      final directorio = Directory.systemTemp.createTempSync(
+        'studybuddy_test_',
+      );
+      addTearDown(() => directorio.deleteSync(recursive: true));
+      final ruta = p.join(directorio.path, 'pomodoro.db');
+
+      final primera = await MateriasRepositorySqflite.abrir(ruta: ruta);
+      await primera.guardarPomodoroEnCurso(corriendo());
+      await primera.guardarAjuste('modo_demo', '1');
+      await primera.cerrar();
+
+      final segunda = await MateriasRepositorySqflite.abrir(ruta: ruta);
+      addTearDown(segunda.cerrar);
+
+      expect((await segunda.obtenerPomodoroEnCurso())!.ciclos, 2);
+      expect(await segunda.obtenerAjuste('modo_demo'), '1');
+    });
+  });
+
+  test(
+    'actualizar desde la versión 3 conserva todo y habilita las tablas nuevas',
+    () async {
+      final directorio = Directory.systemTemp.createTempSync(
+        'studybuddy_test_',
+      );
+      addTearDown(() => directorio.deleteSync(recursive: true));
+      final ruta = p.join(directorio.path, 'v3.db');
+
+      // Base como la dejó la versión de materias por semestre (versión 3).
+      final dbVieja = await databaseFactoryFfi.openDatabase(
+        ruta,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE materias (
+                id TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                color_indice INTEGER NOT NULL,
+                icono_clave TEXT NOT NULL,
+                semestre TEXT NOT NULL,
+                creada INTEGER NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE apuntes (
+                id TEXT PRIMARY KEY,
+                materia_id TEXT NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
+                titulo TEXT NOT NULL,
+                contenido TEXT NOT NULL,
+                creada INTEGER NOT NULL,
+                modificada INTEGER NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE sesiones_enfoque (
+                id TEXT PRIMARY KEY,
+                materia_id TEXT,
+                inicio INTEGER NOT NULL,
+                duracion_segundos INTEGER NOT NULL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE intentos_quiz (
+                id TEXT PRIMARY KEY,
+                materia_id TEXT NOT NULL,
+                aciertos INTEGER NOT NULL,
+                total INTEGER NOT NULL,
+                fecha INTEGER NOT NULL
+              )
+            ''');
+          },
+        ),
+      );
+      await dbVieja.insert('materias', {
+        'id': 'mat_v3',
+        'nombre': 'Materia v3',
+        'descripcion': '',
+        'color_indice': 0,
+        'icono_clave': 'libro',
+        'semestre': '2026-2',
+        'creada': 1,
+      });
+      await dbVieja.insert('apuntes', {
+        'id': 'apu_v3',
+        'materia_id': 'mat_v3',
+        'titulo': 'Apunte v3',
+        'contenido': 'texto',
+        'creada': 1,
+        'modificada': 1,
+      });
+      await dbVieja.insert('sesiones_enfoque', {
+        'id': 'ses_v3',
+        'materia_id': 'mat_v3',
+        'inicio': DateTime(2026, 10, 11, 9).millisecondsSinceEpoch,
+        'duracion_segundos': 1500,
+      });
+      await dbVieja.insert('intentos_quiz', {
+        'id': 'qz_v3',
+        'materia_id': 'mat_v3',
+        'aciertos': 4,
+        'total': 5,
+        'fecha': 1,
+      });
+      await dbVieja.close();
+
+      final actualizada = await MateriasRepositorySqflite.abrir(ruta: ruta);
+      addTearDown(actualizada.cerrar);
+
+      final materia = (await actualizada.obtenerMaterias()).single;
+      expect(materia.nombre, 'Materia v3');
+      expect(materia.semestre, '2026-2');
+      expect(materia.apuntes.single.titulo, 'Apunte v3');
+      expect(await actualizada.obtenerSesionesEnfoque(), hasLength(1));
+      expect(await actualizada.obtenerIntentosQuiz(), hasLength(1));
+
+      await actualizada.guardarAjuste('modo_demo', '1');
+      expect(await actualizada.obtenerAjuste('modo_demo'), '1');
+      expect(await actualizada.obtenerPomodoroEnCurso(), isNull);
+    },
+  );
 }
