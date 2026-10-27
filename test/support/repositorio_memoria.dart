@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:studybuddy_ia/data/catalogo_materia.dart';
 import 'package:studybuddy_ia/data/materias_repository.dart';
 import 'package:studybuddy_ia/models/apunte.dart';
@@ -142,5 +144,44 @@ class RepositorioMemoria implements MateriasRepository {
     for (final registro in _materias) {
       registro.apuntes.removeWhere((apunte) => apunte.id == id);
     }
+  }
+}
+
+/// Repositorio en memoria cuyas altas esperan a que la prueba abra la [compuerta].
+///
+/// Permite simular un guardado lento para comprobar qué pasa si el usuario
+/// vuelve a tocar "Guardar" mientras el primer guardado sigue en curso.
+class RepositorioLento extends RepositorioMemoria {
+  /// Las altas de materias y apuntes quedan detenidas hasta que se complete.
+  final Completer<void> compuerta = Completer<void>();
+
+  @override
+  Future<Materia> crearMateria({
+    required String nombre,
+    required String descripcion,
+    required int colorIndice,
+    required String iconoClave,
+  }) async {
+    await compuerta.future;
+    return super.crearMateria(
+      nombre: nombre,
+      descripcion: descripcion,
+      colorIndice: colorIndice,
+      iconoClave: iconoClave,
+    );
+  }
+
+  @override
+  Future<Apunte> crearApunte({
+    required String materiaId,
+    required String titulo,
+    required String contenido,
+  }) async {
+    await compuerta.future;
+    return super.crearApunte(
+      materiaId: materiaId,
+      titulo: titulo,
+      contenido: contenido,
+    );
   }
 }

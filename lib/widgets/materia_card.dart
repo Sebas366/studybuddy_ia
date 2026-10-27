@@ -126,48 +126,51 @@ class MateriaCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                // Barra de progreso y porcentaje numérico
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Progreso general',
-                          style: tema.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: esOscuro
-                                ? Colors.white60
-                                : Colors.black.withValues(alpha: 0.55),
+                // El progreso real llega en la Parte 2; solo las materias demo lo muestran
+                if (materia.esDemo) ...[
+                  const SizedBox(height: 18),
+                  // Barra de progreso y porcentaje numérico
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Progreso general',
+                            style: tema.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: esOscuro
+                                  ? Colors.white60
+                                  : Colors.black.withValues(alpha: 0.55),
+                            ),
                           ),
-                        ),
-                        Text(
-                          porcentajeTexto,
-                          style: tema.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: materia.colorInicio,
+                          Text(
+                            porcentajeTexto,
+                            style: tema.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: materia.colorInicio,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: LinearProgressIndicator(
-                        value: materia.progreso,
-                        minHeight: 7,
-                        backgroundColor: esOscuro
-                            ? Colors.white.withValues(alpha: 0.1)
-                            : Colors.black.withValues(alpha: 0.06),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          materia.colorInicio,
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: materia.progreso,
+                          minHeight: 7,
+                          backgroundColor: esOscuro
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: 0.06),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            materia.colorInicio,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

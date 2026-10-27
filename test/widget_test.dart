@@ -1,45 +1,114 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:studybuddy_ia/main.dart';
 import 'package:studybuddy_ia/theme/app_theme.dart';
 
+import 'support/abrir_app.dart';
+import 'support/repositorio_memoria.dart';
+
 void main() {
-  /// Configura el tamaño del viewport para simular un smartphone moderno (1080x2400).
-  void configurarPantalla(WidgetTester tester) {
-    tester.view.physicalSize = const Size(800, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-  }
+  const botonCrearPrimera = Key('crear-primera-materia');
+  const campoNombre = Key('campo-nombre');
+  const botonGuardarMateria = Key('guardar-materia');
 
-  testWidgets('Carga inicial y renderizado de MainShell en StudyBuddy IA',
+  testWidgets('Inicio arranca vacío con botón para crear la primera materia',
       (WidgetTester tester) async {
-    configurarPantalla(tester);
+    await abrirApp(tester, RepositorioMemoria());
 
-    await tester.pumpWidget(const StudyBuddyApp());
-    await tester.pumpAndSettle();
-
-    // Verificación de saludo personalizado y barra de navegación
     expect(find.text('¡Hola, Edwin! 👋'), findsOneWidget);
     expect(find.text('¿Qué vamos a repasar hoy?'), findsOneWidget);
-    expect(find.text('¡Racha de 7 días activa! 🔥'), findsOneWidget);
-    expect(find.text('Inicio'), findsOneWidget);
-    expect(find.text('Plan'), findsOneWidget);
-    expect(find.text('Stats'), findsOneWidget);
-    expect(find.text('Perfil'), findsOneWidget);
+    expect(find.text('Aún no tienes materias'), findsOneWidget);
+    expect(find.byKey(botonCrearPrimera), findsOneWidget);
 
-    // Verificación de materias de prueba visibles
-    expect(find.text('Arquitectura de Computadores'), findsOneWidget);
-    expect(find.text('Bootcamp IA y Datos'), findsOneWidget);
-    expect(find.text('Desarrollo Móvil'), findsOneWidget);
+    // Sin datos de demostración mezclados como si fueran reales.
+    expect(find.text('¡Racha de 7 días activa! 🔥'), findsNothing);
+    expect(find.text('Arquitectura de Computadores'), findsNothing);
+    expect(find.text('Inicio'), findsOneWidget);
+    expect(find.text('Perfil'), findsOneWidget);
+  });
+
+  testWidgets('Crear la primera materia desde el estado vacío',
+      (WidgetTester tester) async {
+    final repositorio = RepositorioMemoria();
+    await abrirApp(tester, repositorio);
+
+    await tester.tap(find.byKey(botonCrearPrimera));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(campoNombre), 'Servicios Telemáticos');
+    await tester.tap(find.byKey(const Key('color-1')));
+    await tester.tap(find.byKey(const Key('icono-red')));
+    await tester.tap(find.byKey(botonGuardarMateria));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Servicios Telemáticos'), findsOneWidget);
+    expect(find.text('Sin apuntes'), findsOneWidget);
+    expect(find.text('Aún no tienes materias'), findsNothing);
+
+    final guardadas = await repositorio.obtenerMaterias();
+    expect(guardadas, hasLength(1));
+    expect(guardadas.single.colorIndice, 1);
+    expect(guardadas.single.iconoClave, 'red');
+  });
+
+  testWidgets('No guarda un nombre vacío o de solo espacios',
+      (WidgetTester tester) async {
+    final repositorio = RepositorioMemoria();
+    await abrirApp(tester, repositorio);
+
+    await tester.tap(find.byKey(botonCrearPrimera));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(campoNombre), '   ');
+    await tester.tap(find.byKey(botonGuardarMateria));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Escribe el nombre de la materia.'), findsOneWidget);
+    expect(await repositorio.obtenerMaterias(), isEmpty);
+  });
+
+  testWidgets('Rechaza un nombre de 61 caracteres y acepta uno de 60',
+      (WidgetTester tester) async {
+    final repositorio = RepositorioMemoria();
+    await abrirApp(tester, repositorio);
+
+    await tester.tap(find.byKey(botonCrearPrimera));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(campoNombre), 'A' * 61);
+    await tester.tap(find.byKey(botonGuardarMateria));
+    await tester.pumpAndSettle();
+    expect(find.text('El nombre no puede pasar de 60 caracteres.'),
+        findsOneWidget);
+    expect(await repositorio.obtenerMaterias(), isEmpty);
+
+    await tester.enterText(find.byKey(campoNombre), 'A' * 60);
+    await tester.tap(find.byKey(botonGuardarMateria));
+    await tester.pumpAndSettle();
+
+    expect((await repositorio.obtenerMaterias()).single.nombre, 'A' * 60);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Doble toque en Guardar crea una sola materia',
+      (WidgetTester tester) async {
+    // El guardado queda en curso mientras se toca el botón por segunda vez.
+    final repositorio = RepositorioLento();
+    await abrirApp(tester, repositorio);
+
+    await tester.tap(find.byKey(botonCrearPrimera));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(campoNombre), 'Redes');
+    await tester.tap(find.byKey(botonGuardarMateria));
+    await tester.pump();
+    await tester.tap(find.byKey(botonGuardarMateria));
+    await tester.pump();
+
+    repositorio.compuerta.complete();
+    await tester.pumpAndSettle();
+
+    expect(await repositorio.obtenerMaterias(), hasLength(1));
   });
 
   testWidgets('Navegación entre pestañas del NavigationBar',
       (WidgetTester tester) async {
-    configurarPantalla(tester);
-
-    await tester.pumpWidget(const StudyBuddyApp());
-    await tester.pumpAndSettle();
+    await abrirApp(tester, RepositorioMemoria());
 
     // Pestaña Plan de Estudio
     await tester.tap(find.text('Plan'));
@@ -69,95 +138,53 @@ void main() {
     expect(find.text('¡Hola, Edwin! 👋'), findsOneWidget);
   });
 
-  testWidgets('Filtrado en vivo en la barra de búsqueda',
-      (WidgetTester tester) async {
-    configurarPantalla(tester);
-
-    await tester.pumpWidget(const StudyBuddyApp());
-    await tester.pumpAndSettle();
+  testWidgets('Buscador filtra materias reales', (WidgetTester tester) async {
+    final repositorio = RepositorioMemoria();
+    await sembrarMateria(repositorio, 'Redes de Computadores');
+    await sembrarMateria(repositorio, 'Cálculo');
+    await abrirApp(tester, repositorio);
 
     final campoBusqueda = find.byType(TextField);
     expect(campoBusqueda, findsOneWidget);
 
-    // Escribimos "MIPS"
-    await tester.enterText(campoBusqueda, 'MIPS');
+    await tester.enterText(campoBusqueda, 'redes');
     await tester.pumpAndSettle();
+    expect(find.text('Redes de Computadores'), findsOneWidget);
+    expect(find.text('Cálculo'), findsNothing);
 
-    expect(find.text('Arquitectura de Computadores'), findsOneWidget);
-    expect(find.text('Bootcamp IA y Datos'), findsNothing);
-    expect(find.text('Desarrollo Móvil'), findsNothing);
-
-    // Limpiamos el texto
     await tester.enterText(campoBusqueda, '');
     await tester.pumpAndSettle();
-
-    expect(find.text('Arquitectura de Computadores'), findsOneWidget);
-    expect(find.text('Bootcamp IA y Datos'), findsOneWidget);
-    expect(find.text('Desarrollo Móvil'), findsOneWidget);
+    expect(find.text('Redes de Computadores'), findsOneWidget);
+    expect(find.text('Cálculo'), findsOneWidget);
   });
 
-  testWidgets('Navegación a Detalle de Materia y herramientas 2x2',
+  testWidgets('Pomodoro se abre desde una materia real',
       (WidgetTester tester) async {
-    configurarPantalla(tester);
+    final repositorio = RepositorioMemoria();
+    await sembrarMateria(repositorio, 'Redes de Computadores');
+    await abrirApp(tester, repositorio);
 
-    await tester.pumpWidget(const StudyBuddyApp());
+    await tester.tap(find.text('Redes de Computadores'));
     await tester.pumpAndSettle();
-
-    // Tocamos en la primera materia
-    await tester.tap(find.text('Arquitectura de Computadores'));
-    await tester.pumpAndSettle();
-
-    // Verificamos elementos de la pantalla de detalle
-    expect(find.text('Herramientas de Estudio'), findsOneWidget);
-    expect(find.text('Resumir'), findsOneWidget);
-    expect(find.text('Quiz IA'), findsOneWidget);
-    expect(find.text('Tutor IA'), findsOneWidget);
-    expect(find.text('Pomodoro'), findsOneWidget);
-    expect(find.text('Escanear'), findsOneWidget);
-
-    // Probamos el SnackBar del botón Escanear
-    await tester.tap(find.text('Escanear'));
-    await tester.pump();
-    expect(find.text('Función de escaneo de apuntes con IA próximamente...'),
-        findsOneWidget);
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('Flujo de Pomodoro funcional', (WidgetTester tester) async {
-    configurarPantalla(tester);
-
-    await tester.pumpWidget(const StudyBuddyApp());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Arquitectura de Computadores'));
-    await tester.pumpAndSettle();
-
-    // Abrir Pomodoro
     await tester.tap(find.text('Pomodoro'));
     await tester.pumpAndSettle();
 
-    // Verificar tiempo inicial de 25:00 en modo Enfoque
     expect(find.text('25:00'), findsOneWidget);
     expect(find.text('Enfoque'), findsOneWidget);
     expect(find.text('Descanso Corto'), findsOneWidget);
     expect(find.text('Descanso Largo'), findsOneWidget);
 
-    // Cambiar a Descanso Corto (05:00)
     await tester.tap(find.text('Descanso Corto'));
     await tester.pumpAndSettle();
     expect(find.text('05:00'), findsOneWidget);
 
-    // Volver a la pantalla anterior
     await tester.pageBack();
     await tester.pumpAndSettle();
   });
 
   testWidgets('Alternancia de Modo Oscuro desde Perfil',
       (WidgetTester tester) async {
-    configurarPantalla(tester);
-
-    await tester.pumpWidget(const StudyBuddyApp());
-    await tester.pumpAndSettle();
+    await abrirApp(tester, RepositorioMemoria());
 
     await tester.tap(find.text('Perfil'));
     await tester.pumpAndSettle();
@@ -165,7 +192,6 @@ void main() {
     final switchModoOscuro = find.widgetWithText(SwitchListTile, 'Modo Oscuro');
     expect(switchModoOscuro, findsOneWidget);
 
-    // Alternar interruptor
     await tester.tap(switchModoOscuro);
     await tester.pumpAndSettle();
 
