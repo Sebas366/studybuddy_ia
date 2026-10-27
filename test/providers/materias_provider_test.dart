@@ -86,4 +86,59 @@ void main() {
 
     expect(provider.porId('no-existe'), isNull);
   });
+
+  group('cuando la base de datos falla', () {
+    test('cargar no lanza: termina de cargar y expone un error', () async {
+      final inestable = RepositorioInestable()..fallarLectura = true;
+      final proveedor = MateriasProvider(inestable);
+
+      await proveedor.cargar();
+
+      expect(proveedor.cargando, isFalse);
+      expect(proveedor.error, 'No se pudieron cargar tus materias.');
+      expect(proveedor.materias, isEmpty);
+    });
+
+    test('reintentar cargar limpia el error cuando la lectura vuelve', () async {
+      final inestable = RepositorioInestable()..fallarLectura = true;
+      final proveedor = MateriasProvider(inestable);
+      await proveedor.cargar();
+
+      inestable.fallarLectura = false;
+      await proveedor.cargar();
+
+      expect(proveedor.error, isNull);
+    });
+
+    test(
+        'si la recarga falla después de guardar, crearMateria no lanza y no se duplica',
+        () async {
+      final inestable = RepositorioInestable();
+      final proveedor = MateriasProvider(inestable);
+      await proveedor.cargar();
+
+      inestable.fallarLectura = true;
+      await proveedor.crearMateria(nombre: 'Redes');
+
+      expect(proveedor.error, isNotNull);
+      inestable.fallarLectura = false;
+      expect(await inestable.obtenerMaterias(), hasLength(1));
+    });
+
+    test(
+        'si la recarga falla después de guardar, crearApunte no lanza',
+        () async {
+      final inestable = RepositorioInestable();
+      final proveedor = MateriasProvider(inestable);
+      await proveedor.cargar();
+      await proveedor.crearMateria(nombre: 'Redes');
+      final id = proveedor.materias.single.id;
+
+      inestable.fallarLectura = true;
+      await proveedor.crearApunte(materiaId: id, titulo: 'DHCP', contenido: 'DORA');
+
+      inestable.fallarLectura = false;
+      expect((await inestable.obtenerMaterias()).single.apuntes, hasLength(1));
+    });
+  });
 }

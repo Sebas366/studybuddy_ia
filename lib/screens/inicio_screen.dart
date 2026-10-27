@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../models/materia.dart';
 import '../providers/materias_provider.dart';
 import '../theme/app_colors.dart';
@@ -42,8 +43,9 @@ class _InicioScreenState extends State<InicioScreen> {
     return materias.where((materia) {
       return materia.nombre.toLowerCase().contains(busqueda) ||
           materia.descripcion.toLowerCase().contains(busqueda) ||
-          materia.apuntes
-              .any((apunte) => apunte.titulo.toLowerCase().contains(busqueda));
+          materia.apuntes.any(
+            (apunte) => apunte.titulo.toLowerCase().contains(busqueda),
+          );
     }).toList();
   }
 
@@ -81,7 +83,10 @@ class _InicioScreenState extends State<InicioScreen> {
         final confirmado = await confirmarBorrado(
           context,
           titulo: 'Borrar materia',
-          mensaje: mensajeBorradoMateria(materia.nombre, materia.apuntes.length),
+          mensaje: mensajeBorradoMateria(
+            materia.nombre,
+            materia.apuntes.length,
+          ),
         );
         if (confirmado) await provider.borrarMateria(materia.id);
     }
@@ -195,6 +200,11 @@ class _InicioScreenState extends State<InicioScreen> {
                       padding: EdgeInsets.symmetric(vertical: 60),
                       child: Center(child: CircularProgressIndicator()),
                     )
+                  else if (provider.error != null)
+                    _ErrorCarga(
+                      mensaje: provider.error!,
+                      onReintentar: provider.cargar,
+                    )
                   else if (todas.isEmpty)
                     _EstadoVacio(
                       onCrear: () => mostrarFormularioMateria(context),
@@ -269,7 +279,9 @@ class _InicioScreenState extends State<InicioScreen> {
                             Text(
                               'No se encontraron materias con "$_filtroBusqueda"',
                               style: tema.textTheme.bodyMedium?.copyWith(
-                                color: esOscuro ? Colors.white54 : Colors.black45,
+                                color: esOscuro
+                                    ? Colors.white54
+                                    : Colors.black45,
                               ),
                             ),
                           ],
@@ -304,6 +316,37 @@ class _InicioScreenState extends State<InicioScreen> {
 /// Acciones disponibles al mantener pulsada una materia.
 enum _AccionMateria { editar, borrar }
 
+/// Error de lectura en Inicio: explica el problema y ofrece reintentar.
+class _ErrorCarga extends StatelessWidget {
+  final String mensaje;
+
+  /// Acción ejecutada al pulsar "Reintentar".
+  final VoidCallback onReintentar;
+
+  const _ErrorCarga({required this.mensaje, required this.onReintentar});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 10),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline_rounded, size: 54),
+          const SizedBox(height: 16),
+          Text(mensaje, textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            key: const Key('reintentar-carga'),
+            onPressed: onReintentar,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Estado vacío de Inicio: invita a crear la primera materia.
 class _EstadoVacio extends StatelessWidget {
   /// Acción ejecutada al pulsar "Crear mi primera materia".
@@ -324,7 +367,9 @@ class _EstadoVacio extends StatelessWidget {
             width: 84,
             height: 84,
             decoration: BoxDecoration(
-              color: AppColors.primario.withValues(alpha: esOscuro ? 0.25 : 0.12),
+              color: AppColors.primario.withValues(
+                alpha: esOscuro ? 0.25 : 0.12,
+              ),
               shape: BoxShape.circle,
             ),
             child: const Icon(

@@ -19,6 +19,7 @@ class MateriasProvider extends ChangeNotifier {
 
   List<Materia> _materias = const [];
   bool _cargando = true;
+  String? _error;
 
   /// Materias reales, la más nueva primero (lista no modificable).
   List<Materia> get materias => UnmodifiableListView(_materias);
@@ -26,9 +27,21 @@ class MateriasProvider extends ChangeNotifier {
   /// `true` hasta que termina la primera lectura del repositorio.
   bool get cargando => _cargando;
 
+  /// Mensaje para el usuario si la última lectura falló; `null` si todo va bien.
+  String? get error => _error;
+
   /// Lee las materias del repositorio y notifica a los oyentes.
+  ///
+  /// Nunca lanza: si la lectura falla deja un [error] para que la pantalla
+  /// ofrezca reintentar. Así, un guardado que ya se completó no se reporta
+  /// como fallido solo porque la recarga posterior falló.
   Future<void> cargar() async {
-    _materias = await _repositorio.obtenerMaterias();
+    try {
+      _materias = await _repositorio.obtenerMaterias();
+      _error = null;
+    } catch (_) {
+      _error = 'No se pudieron cargar tus materias.';
+    }
     _cargando = false;
     notifyListeners();
   }

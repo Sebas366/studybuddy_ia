@@ -188,3 +188,18 @@ class RepositorioLento extends RepositorioMemoria {
     );
   }
 }
+
+/// Repositorio en memoria cuya lectura puede fallar a demanda.
+///
+/// Sirve para probar qué pasa cuando la base de datos no responde al cargar
+/// las materias, sin impedir que las altas y bajas se sigan guardando.
+class RepositorioInestable extends RepositorioMemoria {
+  /// Mientras sea `true`, [obtenerMaterias] lanza una excepción.
+  bool fallarLectura = false;
+
+  @override
+  Future<List<Materia>> obtenerMaterias() async {
+    if (fallarLectura) throw StateError('Fallo simulado de lectura');
+    return super.obtenerMaterias();
+  }
+}
