@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'data/materias_repository.dart';
 import 'data/materias_repository_sqflite.dart';
+import 'providers/estadisticas_provider.dart';
 import 'providers/materias_provider.dart';
 import 'screens/error_base_datos_screen.dart';
 import 'screens/main_shell.dart';
@@ -42,8 +43,21 @@ class StudyBuddyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<MateriasProvider>(
-      create: (_) => MateriasProvider(repositorio)..cargar(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<MateriasProvider>(
+          create: (_) => MateriasProvider(repositorio)..cargar(),
+        ),
+        // Se recarga cuando cambian las materias (borrar una borra sus datos).
+        ChangeNotifierProxyProvider<MateriasProvider, EstadisticasProvider>(
+          lazy: false,
+          create: (_) => EstadisticasProvider(repositorio)..cargar(),
+          update: (_, materias, estadisticas) {
+            estadisticas!.sincronizarConMaterias(materias.materias);
+            return estadisticas;
+          },
+        ),
+      ],
       child: ValueListenableBuilder<ThemeMode>(
         valueListenable: modoTemaGlobal,
         builder: (context, modoTema, _) {

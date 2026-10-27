@@ -252,17 +252,60 @@ class RepositorioLento extends RepositorioMemoria {
   }
 }
 
-/// Repositorio en memoria cuya lectura puede fallar a demanda.
+/// Repositorio en memoria cuya lectura y escritura pueden fallar a demanda.
 ///
-/// Sirve para probar qué pasa cuando la base de datos no responde al cargar
-/// las materias, sin impedir que las altas y bajas se sigan guardando.
+/// Sirve para probar qué pasa cuando la base de datos no responde, sin impedir
+/// que el resto de operaciones sigan funcionando.
 class RepositorioInestable extends RepositorioMemoria {
-  /// Mientras sea `true`, [obtenerMaterias] lanza una excepción.
+  /// Mientras sea `true`, las lecturas lanzan una excepción.
   bool fallarLectura = false;
+
+  /// Mientras sea `true`, registrar sesiones e intentos lanza una excepción.
+  bool fallarEscritura = false;
 
   @override
   Future<List<Materia>> obtenerMaterias() async {
     if (fallarLectura) throw StateError('Fallo simulado de lectura');
     return super.obtenerMaterias();
+  }
+
+  @override
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque() async {
+    if (fallarLectura) throw StateError('Fallo simulado de lectura');
+    return super.obtenerSesionesEnfoque();
+  }
+
+  @override
+  Future<List<IntentoQuiz>> obtenerIntentosQuiz() async {
+    if (fallarLectura) throw StateError('Fallo simulado de lectura');
+    return super.obtenerIntentosQuiz();
+  }
+
+  @override
+  Future<SesionEnfoque> registrarSesionEnfoque({
+    String? materiaId,
+    required DateTime inicio,
+    required int duracionSegundos,
+  }) async {
+    if (fallarEscritura) throw StateError('Fallo simulado de escritura');
+    return super.registrarSesionEnfoque(
+      materiaId: materiaId,
+      inicio: inicio,
+      duracionSegundos: duracionSegundos,
+    );
+  }
+
+  @override
+  Future<IntentoQuiz> registrarIntentoQuiz({
+    required String materiaId,
+    required int aciertos,
+    required int total,
+  }) async {
+    if (fallarEscritura) throw StateError('Fallo simulado de escritura');
+    return super.registrarIntentoQuiz(
+      materiaId: materiaId,
+      aciertos: aciertos,
+      total: total,
+    );
   }
 }
