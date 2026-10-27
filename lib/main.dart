@@ -58,23 +58,63 @@ class StudyBuddyApp extends StatelessWidget {
           },
         ),
       ],
-      child: ValueListenableBuilder<ThemeMode>(
-        valueListenable: modoTemaGlobal,
-        builder: (context, modoTema, _) {
-          return MaterialApp(
-            title: 'StudyBuddy IA',
-            debugShowCheckedModeBanner: false,
+      child: _RefrescarAlReanudar(
+        child: ValueListenableBuilder<ThemeMode>(
+          valueListenable: modoTemaGlobal,
+          builder: (context, modoTema, _) {
+            return MaterialApp(
+              title: 'StudyBuddy IA',
+              debugShowCheckedModeBanner: false,
 
-            // Definición de temas claro y oscuro
-            theme: AppTheme.temaClaro,
-            darkTheme: AppTheme.temaOscuro,
-            themeMode: modoTema,
+              // Definición de temas claro y oscuro
+              theme: AppTheme.temaClaro,
+              darkTheme: AppTheme.temaOscuro,
+              themeMode: modoTema,
 
-            // Pantalla principal con la barra de navegación inferior
-            home: const MainShell(),
-          );
-        },
+              // Pantalla principal con la barra de navegación inferior
+              home: const MainShell(),
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+/// Recarga las estadísticas cuando la app vuelve a primer plano.
+///
+/// Así los datos y las fechas (racha, semana actual) no quedan viejos si la app
+/// estuvo en segundo plano, por ejemplo durante la noche.
+class _RefrescarAlReanudar extends StatefulWidget {
+  final Widget child;
+
+  const _RefrescarAlReanudar({required this.child});
+
+  @override
+  State<_RefrescarAlReanudar> createState() => _RefrescarAlReanudarState();
+}
+
+class _RefrescarAlReanudarState extends State<_RefrescarAlReanudar>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    if (estado == AppLifecycleState.resumed) {
+      context.read<EstadisticasProvider>().cargar();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

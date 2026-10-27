@@ -45,4 +45,22 @@ void main() {
       expect(estadisticas.intentos, isEmpty);
     },
   );
+
+  testWidgets('Al volver a la app se refrescan las estadísticas y la racha', (
+    WidgetTester tester,
+  ) async {
+    final repositorio = RepositorioMemoria();
+    await abrirApp(tester, repositorio);
+    expect(find.textContaining('¡Racha de'), findsNothing);
+
+    // Cambia algo "mientras la app estaba en segundo plano", sin pasar por el provider.
+    await repositorio.registrarSesionEnfoque(
+      inicio: DateTime.now(),
+      duracionSegundos: 1500,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(find.text('¡Racha de 1 día activa! 🔥'), findsOneWidget);
+  });
 }

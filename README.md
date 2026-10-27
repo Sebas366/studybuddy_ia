@@ -6,7 +6,7 @@ App móvil de estudio asistido por IA, desarrollada en Flutter como proyecto fin
 >
 > - **Fase 1 (completa): mockups.** Interfaz completa y navegable con datos de demostración, sin lógica real ni IA.
 > - **Fase 2, parte 1 (completa): materias y apuntes reales con persistencia local.** Puedes crear, editar y borrar tus propias materias y apuntes, y siguen ahí al cerrar y reabrir la app (base de datos SQLite en el dispositivo).
-> - **Fase 2, parte 2 (completa): Pomodoro, quiz y estadísticas reales.** Cada bloque de enfoque que termina se guarda como sesión de estudio (el temporizador sigue la hora real, así que funciona aunque se bloquee la pantalla), cada quiz terminado guarda su resultado, y **Stats** e **Inicio** (racha) muestran tus números reales.
+> - **Fase 2, parte 2 (completa): Pomodoro, quiz y estadísticas reales.** Cada bloque de enfoque que termina se guarda como sesión de estudio (el temporizador sigue la hora real: si la pantalla se apaga, el bloque se completa y se guarda al volver a la app; si Android cierra la app mientras tanto, ese bloque se pierde), cada quiz terminado guarda su resultado, y **Stats** e **Inicio** (racha) muestran tus números reales. Cada sesión cuenta para el día en que **termina** el bloque.
 > - **Todavía con datos de demostración:** la pestaña **Plan** (sesiones de hoy y próximo parcial) y las 3 materias de ejemplo.
 > - **Todavía sin IA (Fase 3):** el resumen, las ideas clave, el quiz y el tutor muestran el aviso "Disponible en la Fase 3" en tus materias reales; por eso el quiz solo se puede jugar en las materias de ejemplo y el "% dominado" sigue oculto. No hay llamadas a ningún modelo de IA ni backend.
 >
