@@ -1,6 +1,10 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../models/materia.dart';
+import '../providers/estadisticas_provider.dart';
 import '../theme/app_colors.dart';
 
 /// Modalidades de tiempo soportadas por la técnica Pomodoro.
@@ -21,20 +25,25 @@ enum ModoPomodoro {
 /// Soporta los modos Enfoque (25 min), Descanso Corto (5 min) y Descanso Largo (15 min).
 /// Permite pausar, reiniciar, saltar ciclos y contabilizar las rondas completadas.
 /// Libera y cancela estrictamente su temporizador interno en [dispose].
+///
+/// El tiempo restante se calcula contra una hora de fin (no contando ticks), por
+/// lo que el bloque termina correctamente aunque el celular se bloquee. Cada
+/// bloque de enfoque que llega a 00:00 se guarda como sesión de estudio.
 class PomodoroScreen extends StatefulWidget {
   /// Materia opcional asociada a la sesión de enfoque.
   final Materia? materia;
 
-  const PomodoroScreen({
-    super.key,
-    this.materia,
-  });
+  /// Función que devuelve la hora actual; las pruebas la reemplazan por un reloj simulado.
+  final DateTime Function() ahora;
+
+  const PomodoroScreen({super.key, this.materia, this.ahora = DateTime.now});
 
   @override
   State<PomodoroScreen> createState() => _PomodoroScreenState();
 }
 
-class _PomodoroScreenState extends State<PomodoroScreen> {
+class _PomodoroScreenState extends State<PomodoroScreen>
+    with WidgetsBindingObserver {
   /// Modo Pomodoro activo (por defecto Enfoque de 25 minutos).
   ModoPomodoro _modoActual = ModoPomodoro.enfoque;
 
@@ -50,41 +59,74 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   /// Instancia del temporizador periódico de [dart:async].
   Timer? _temporizador;
 
+  /// Hora a la que termina el bloque en curso (solo mientras corre).
+  DateTime? _finEsperado;
+
+  /// Hora en que empezó el bloque actual; se guarda con la sesión al completarlo.
+  DateTime? _inicioBloque;
+
   @override
   void initState() {
     super.initState();
     _segundosRestantes = _modoActual.segundosTotales;
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // REQUISITO ESTRICTO: Cancelar el temporizador para prevenir fugas de memoria
     _temporizador?.cancel();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    // Al volver a la app se recalcula el tiempo con la hora real.
+    if (estado == AppLifecycleState.resumed) {
+      _actualizarTiempo();
+    }
+  }
+
+  /// Recalcula los segundos restantes contra la hora de fin y completa el bloque si ya venció.
+  void _actualizarTiempo() {
+    final fin = _finEsperado;
+    if (fin == null || !_estaCorriendo) return;
+
+    final milisegundos = fin.difference(widget.ahora()).inMilliseconds;
+    final restantes = milisegundos <= 0 ? 0 : (milisegundos / 1000).ceil();
+    if (restantes <= 0) {
+      _alCompletarTiempo();
+    } else if (restantes != _segundosRestantes) {
+      setState(() {
+        _segundosRestantes = restantes;
+      });
+    }
+  }
+
   /// Inicia o pausa la cuenta regresiva del temporizador.
   void _alternarTemporizador() {
     if (_estaCorriendo) {
+      // Se pone al día antes de pausar; si el bloque ya había vencido, se completa.
+      _actualizarTiempo();
+      if (!_estaCorriendo) return;
       _temporizador?.cancel();
       setState(() {
         _estaCorriendo = false;
+        _finEsperado = null;
       });
     } else {
+      final ahora = widget.ahora();
+      _inicioBloque ??= ahora;
+      _finEsperado = ahora.add(Duration(seconds: _segundosRestantes));
       setState(() {
         _estaCorriendo = true;
       });
 
-      _temporizador = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_segundosRestantes > 0) {
-          setState(() {
-            _segundosRestantes--;
-          });
-        } else {
-          // El tiempo expiró
-          _alCompletarTiempo();
-        }
-      });
+      _temporizador = Timer.periodic(
+        const Duration(seconds: 1),
+        (timer) => _actualizarTiempo(),
+      );
     }
   }
 
@@ -96,6 +138,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     });
 
     if (_modoActual == ModoPomodoro.enfoque) {
+      _guardarSesionEnfoque();
       _ciclosCompletados++;
       // Notificación sonora o visual
       ScaffoldMessenger.of(context).showSnackBar(
@@ -125,9 +168,27 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     }
   }
 
+  /// Guarda el bloque de enfoque que acaba de completarse como sesión de estudio.
+  ///
+  /// No espera el resultado: si no se puede guardar, el temporizador sigue su curso.
+  void _guardarSesionEnfoque() {
+    final duracion = _modoActual.segundosTotales;
+    final inicio =
+        _inicioBloque ?? widget.ahora().subtract(Duration(seconds: duracion));
+    unawaited(
+      context.read<EstadisticasProvider>().registrarSesionEnfoque(
+        materiaId: widget.materia?.id,
+        inicio: inicio,
+        duracionSegundos: duracion,
+      ),
+    );
+  }
+
   /// Cambia de modalidad manual o automáticamente, reiniciando la cuenta.
   void _cambiarModo(ModoPomodoro nuevoModo) {
     _temporizador?.cancel();
+    _finEsperado = null;
+    _inicioBloque = null;
     setState(() {
       _modoActual = nuevoModo;
       _segundosRestantes = nuevoModo.segundosTotales;
@@ -138,6 +199,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   /// Reinicia el contador del modo actual a su valor original.
   void _reiniciarTemporizador() {
     _temporizador?.cancel();
+    _finEsperado = null;
+    _inicioBloque = null;
     setState(() {
       _segundosRestantes = _modoActual.segundosTotales;
       _estaCorriendo = false;
@@ -171,8 +234,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     final colorPrimarioModo = _modoActual == ModoPomodoro.enfoque
         ? AppColors.primario
         : (_modoActual == ModoPomodoro.descansoCorto
-            ? const Color(0xFF00897B)
-            : const Color(0xFF3949AB));
+              ? const Color(0xFF00897B)
+              : const Color(0xFF3949AB));
 
     return Scaffold(
       appBar: AppBar(
@@ -210,15 +273,16 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                             decoration: BoxDecoration(
                               color: _modoActual == modo
                                   ? (esOscuro
-                                      ? colorPrimarioModo
-                                      : Colors.white)
+                                        ? colorPrimarioModo
+                                        : Colors.white)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: _modoActual == modo
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.08),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.08,
+                                        ),
                                         blurRadius: 8,
                                         offset: const Offset(0, 2),
                                       ),
@@ -235,11 +299,11 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                                     : FontWeight.normal,
                                 color: _modoActual == modo
                                     ? (esOscuro
-                                        ? Colors.white
-                                        : colorPrimarioModo)
+                                          ? Colors.white
+                                          : colorPrimarioModo)
                                     : (esOscuro
-                                        ? Colors.white60
-                                        : Colors.black54),
+                                          ? Colors.white60
+                                          : Colors.black54),
                               ),
                             ),
                           ),
@@ -306,8 +370,10 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
               // Contador visual de ciclos completados (Ciclo X de 4)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: esOscuro ? const Color(0xFF23202B) : Colors.white,
                   borderRadius: BorderRadius.circular(18),
@@ -344,9 +410,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                           decoration: BoxDecoration(
                             color: activo
                                 ? AppColors.primario
-                                : (esOscuro
-                                    ? Colors.white24
-                                    : Colors.black12),
+                                : (esOscuro ? Colors.white24 : Colors.black12),
                             shape: BoxShape.circle,
                           ),
                         );
@@ -364,6 +428,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                 children: [
                   // Botón Reiniciar
                   IconButton.filledTonal(
+                    key: const Key('pomodoro-reiniciar'),
                     style: IconButton.styleFrom(
                       padding: const EdgeInsets.all(16),
                       backgroundColor: esOscuro
@@ -379,6 +444,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
                   // Botón Iniciar / Pausar principal
                   ElevatedButton(
+                    key: const Key('pomodoro-iniciar-pausar'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: colorPrimarioModo,
                       foregroundColor: Colors.white,
@@ -400,6 +466,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
                   // Botón Saltar bloque
                   IconButton.filledTonal(
+                    key: const Key('pomodoro-saltar'),
                     style: IconButton.styleFrom(
                       padding: const EdgeInsets.all(16),
                       backgroundColor: esOscuro
