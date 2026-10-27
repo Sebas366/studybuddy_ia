@@ -16,12 +16,19 @@ const List<String> nombresDiasCortos = [
 DateTime _soloFecha(DateTime momento) =>
     DateTime(momento.year, momento.month, momento.day);
 
+/// Día (sin hora) al que se acredita una sesión: el día en que terminó el bloque.
+///
+/// Un bloque que empieza a las 23:50 y termina a las 00:15 cuenta para el día
+/// siguiente, que es cuando realmente se completó.
+DateTime _diaDeSesion(SesionEnfoque sesion) =>
+    _soloFecha(sesion.inicio.add(Duration(seconds: sesion.duracionSegundos)));
+
 /// Calcula la racha de estudio: días consecutivos con al menos una sesión.
 ///
 /// Cuenta hacia atrás desde hoy; si hoy todavía no hay sesión pero ayer sí,
 /// la racha sigue viva y cuenta desde ayer. Devuelve 0 si no hay racha.
 int calcularRacha(List<SesionEnfoque> sesiones, DateTime hoy) {
-  final dias = {for (final sesion in sesiones) _soloFecha(sesion.inicio)};
+  final dias = {for (final sesion in sesiones) _diaDeSesion(sesion)};
   var dia = _soloFecha(hoy);
   if (!dias.contains(dia)) {
     dia = DateTime(dia.year, dia.month, dia.day - 1);
@@ -47,7 +54,7 @@ List<double> horasPorDiaDeLaSemana(List<SesionEnfoque> sesiones, DateTime hoy) {
   return List.generate(7, (indice) {
     final dia = DateTime(lunes.year, lunes.month, lunes.day + indice);
     final segundos = sesiones
-        .where((sesion) => _soloFecha(sesion.inicio) == dia)
+        .where((sesion) => _diaDeSesion(sesion) == dia)
         .fold<int>(0, (suma, sesion) => suma + sesion.duracionSegundos);
     return segundos / 3600;
   });

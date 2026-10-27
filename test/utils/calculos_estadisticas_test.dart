@@ -16,8 +16,12 @@ void main() {
     );
   }
 
-  IntentoQuiz intento(int aciertos, int total, DateTime fecha,
-      [String materiaId = 'mat_a']) {
+  IntentoQuiz intento(
+    int aciertos,
+    int total,
+    DateTime fecha, [
+    String materiaId = 'mat_a',
+  ]) {
     return IntentoQuiz(
       id: 'qz_${fecha.microsecondsSinceEpoch}_$aciertos',
       materiaId: materiaId,
@@ -69,6 +73,18 @@ void main() {
       expect(calcularRacha(sesiones, hoy), 1);
     });
 
+    test(
+      'un bloque que cruza la medianoche cuenta para el día en que terminó',
+      () {
+        final sesiones = [
+          sesion(DateTime(2026, 10, 27, 12), 1500),
+          // Empieza el 27 a las 23:50 y termina el 28 a las 00:15.
+          sesion(DateTime(2026, 10, 27, 23, 50), 1500),
+        ];
+        expect(calcularRacha(sesiones, hoy), 2);
+      },
+    );
+
     test('un día sin estudiar rompe la racha', () {
       final sesiones = [
         sesion(DateTime(2026, 10, 28, 9), 1500),
@@ -85,6 +101,13 @@ void main() {
         sesion(DateTime(2026, 10, 28, 10), 5400),
       ];
       expect(horasPorDiaDeLaSemana(sesiones, hoy), [1.0, 0, 1.5, 0, 0, 0, 0]);
+    });
+
+    test('un bloque que cruza la medianoche suma al día en que terminó', () {
+      final sesiones = [sesion(DateTime(2026, 10, 27, 23, 50), 1500)];
+      final horas = horasPorDiaDeLaSemana(sesiones, hoy);
+      expect(horas[1], 0); // martes: empezó, pero no terminó ese día
+      expect(horas[2], 1500 / 3600); // miércoles: terminó
     });
 
     test('ignora las sesiones de la semana anterior', () {
@@ -114,7 +137,15 @@ void main() {
   });
 
   test('nombresDiasCortos va de lunes a domingo', () {
-    expect(nombresDiasCortos, ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']);
+    expect(nombresDiasCortos, [
+      'Lun',
+      'Mar',
+      'Mié',
+      'Jue',
+      'Vie',
+      'Sáb',
+      'Dom',
+    ]);
   });
 
   group('segundosTotales', () {

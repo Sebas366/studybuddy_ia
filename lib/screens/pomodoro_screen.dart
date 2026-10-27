@@ -62,9 +62,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   /// Hora a la que termina el bloque en curso (solo mientras corre).
   DateTime? _finEsperado;
 
-  /// Hora en que empezó el bloque actual; se guarda con la sesión al completarlo.
-  DateTime? _inicioBloque;
-
   @override
   void initState() {
     super.initState();
@@ -116,9 +113,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         _finEsperado = null;
       });
     } else {
-      final ahora = widget.ahora();
-      _inicioBloque ??= ahora;
-      _finEsperado = ahora.add(Duration(seconds: _segundosRestantes));
+      _finEsperado = widget.ahora().add(Duration(seconds: _segundosRestantes));
       setState(() {
         _estaCorriendo = true;
       });
@@ -132,13 +127,15 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
   /// Maneja la finalización de un ciclo de tiempo.
   void _alCompletarTiempo() {
+    // Hora en que terminó realmente el bloque (aunque el tick llegue tarde).
+    final fin = _finEsperado ?? widget.ahora();
     _temporizador?.cancel();
     setState(() {
       _estaCorriendo = false;
     });
 
     if (_modoActual == ModoPomodoro.enfoque) {
-      _guardarSesionEnfoque();
+      _guardarSesionEnfoque(fin);
       _ciclosCompletados++;
       // Notificación sonora o visual
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,17 +165,17 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     }
   }
 
-  /// Guarda el bloque de enfoque que acaba de completarse como sesión de estudio.
+  /// Guarda el bloque de enfoque que terminó en [fin] como sesión de estudio.
   ///
-  /// No espera el resultado: si no se puede guardar, el temporizador sigue su curso.
-  void _guardarSesionEnfoque() {
+  /// La sesión se ubica justo antes de su hora de fin: así, aunque se pause por
+  /// horas, se acredita al día en que realmente se completó. No espera el
+  /// resultado: si no se puede guardar, el temporizador sigue su curso.
+  void _guardarSesionEnfoque(DateTime fin) {
     final duracion = _modoActual.segundosTotales;
-    final inicio =
-        _inicioBloque ?? widget.ahora().subtract(Duration(seconds: duracion));
     unawaited(
       context.read<EstadisticasProvider>().registrarSesionEnfoque(
         materiaId: widget.materia?.id,
-        inicio: inicio,
+        inicio: fin.subtract(Duration(seconds: duracion)),
         duracionSegundos: duracion,
       ),
     );
@@ -188,7 +185,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   void _cambiarModo(ModoPomodoro nuevoModo) {
     _temporizador?.cancel();
     _finEsperado = null;
-    _inicioBloque = null;
     setState(() {
       _modoActual = nuevoModo;
       _segundosRestantes = nuevoModo.segundosTotales;
@@ -200,7 +196,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   void _reiniciarTemporizador() {
     _temporizador?.cancel();
     _finEsperado = null;
-    _inicioBloque = null;
     setState(() {
       _segundosRestantes = _modoActual.segundosTotales;
       _estaCorriendo = false;

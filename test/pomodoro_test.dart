@@ -125,6 +125,30 @@ void main() {
     expect(find.text('19:00'), findsOneWidget);
   });
 
+  testWidgets(
+    'Tras una pausa larga la sesión termina en la hora real de fin, no en la de inicio',
+    (WidgetTester tester) async {
+      await montar(tester);
+
+      await tester.tap(find.byKey(botonIniciar));
+      await tester.pump();
+      await pasarTiempo(tester, const Duration(minutes: 5));
+      await tester.tap(find.byKey(botonIniciar)); // pausa
+      await tester.pump();
+      await pasarTiempo(tester, const Duration(hours: 3));
+      await tester.tap(find.byKey(botonIniciar)); // reanuda a las 12:05
+      await tester.pump();
+      await pasarTiempo(
+        tester,
+        const Duration(minutes: 20),
+      ); // termina a las 12:25
+
+      final sesion = (await repositorio.obtenerSesionesEnfoque()).single;
+      // El bloque de 25 min se ubica justo antes de su hora de fin (12:25).
+      expect(sesion.inicio, DateTime(2026, 10, 27, 12, 0));
+    },
+  );
+
   testWidgets('Saltar y reiniciar un bloque no guardan sesiones', (
     WidgetTester tester,
   ) async {
