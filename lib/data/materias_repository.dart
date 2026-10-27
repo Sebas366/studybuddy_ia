@@ -1,4 +1,5 @@
 import '../models/apunte.dart';
+import '../models/estado_pomodoro.dart';
 import '../models/intento_quiz.dart';
 import '../models/materia.dart';
 import '../models/sesion_enfoque.dart';
@@ -72,4 +73,19 @@ abstract class MateriasRepository {
 
   /// Devuelve todos los intentos de quiz, el más reciente primero.
   Future<List<IntentoQuiz>> obtenerIntentosQuiz();
+
+  /// Devuelve el bloque de Pomodoro en curso, o `null` si no hay ninguno guardado.
+  Future<EstadoPomodoro?> obtenerPomodoroEnCurso();
+
+  /// Guarda el bloque de Pomodoro en curso, reemplazando el anterior.
+  Future<void> guardarPomodoroEnCurso(EstadoPomodoro estado);
+
+  /// Borra el bloque de Pomodoro en curso guardado.
+  Future<void> borrarPomodoroEnCurso();
+
+  /// Devuelve el valor de un ajuste de la app, o `null` si nunca se guardó.
+  Future<String?> obtenerAjuste(String clave);
+
+  /// Guarda un ajuste de la app, reemplazando su valor anterior.
+  Future<void> guardarAjuste(String clave, String valor);
 }
