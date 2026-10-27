@@ -135,7 +135,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Estadísticas y Rendimiento'), findsOneWidget);
     expect(find.text('Horas de Estudio Semanal'), findsOneWidget);
-    expect(find.text('Progreso por Materia'), findsOneWidget);
+    expect(find.text('Estudio por Materia'), findsOneWidget);
 
     // Pestaña Perfil
     await tester.tap(find.text('Perfil'));
