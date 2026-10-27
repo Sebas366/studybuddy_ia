@@ -3,15 +3,18 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/apunte.dart';
+import '../models/intento_quiz.dart';
 import '../models/materia.dart';
+import '../models/sesion_enfoque.dart';
 import '../utils/formato_fecha.dart';
 import 'catalogo_materia.dart';
 import 'materias_repository.dart';
 
 /// Implementación de [MateriasRepository] sobre una base de datos SQLite local.
 ///
-/// Esquema versión 1: tablas `materias` y `apuntes`. Las fechas se guardan como
-/// milisegundos desde la época. Al borrar una materia, SQLite borra sus apuntes
+/// Esquema versión 2: tablas `materias`, `apuntes`, `sesiones_enfoque` e
+/// `intentos_quiz`. La versión 2 solo agrega las dos últimas (la migración desde
+/// la 1 conserva todo lo guardado). Las fechas se guardan como milisegundos desde la época. Al borrar una materia, SQLite borra sus apuntes
 /// en cascada (requiere `PRAGMA foreign_keys = ON`).
 class MateriasRepositorySqflite implements MateriasRepository {
   MateriasRepositorySqflite._(this._db);
@@ -28,7 +31,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
     final rutaFinal = ruta ?? p.join(await getDatabasesPath(), 'studybuddy.db');
     final db = await openDatabase(
       rutaFinal,
-      version: 1,
+      version: 2,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -51,9 +54,37 @@ class MateriasRepositorySqflite implements MateriasRepository {
             modificada INTEGER NOT NULL
           )
         ''');
+        await _crearTablasVersion2(db);
+      },
+      onUpgrade: (db, versionAnterior, versionNueva) async {
+        if (versionAnterior < 2) await _crearTablasVersion2(db);
       },
     );
     return MateriasRepositorySqflite._(db);
+  }
+
+  /// Crea las tablas que se agregaron en la versión 2 del esquema.
+  ///
+  /// No tienen llave foránea a `materias`: las materias de demostración no
+  /// existen en esa tabla, así que `borrarMateria` limpia estas filas a mano.
+  static Future<void> _crearTablasVersion2(Database db) async {
+    await db.execute('''
+      CREATE TABLE sesiones_enfoque (
+        id TEXT PRIMARY KEY,
+        materia_id TEXT,
+        inicio INTEGER NOT NULL,
+        duracion_segundos INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE intentos_quiz (
+        id TEXT PRIMARY KEY,
+        materia_id TEXT NOT NULL,
+        aciertos INTEGER NOT NULL,
+        total INTEGER NOT NULL,
+        fecha INTEGER NOT NULL
+      )
+    ''');
   }
 
   /// Cierra la conexión con la base de datos.
@@ -105,10 +136,14 @@ class MateriasRepositorySqflite implements MateriasRepository {
 
   @override
   Future<List<Materia>> obtenerMaterias() async {
-    final filasMaterias =
-        await _db.query('materias', orderBy: 'creada DESC, rowid DESC');
-    final filasApuntes =
-        await _db.query('apuntes', orderBy: 'creada DESC, rowid DESC');
+    final filasMaterias = await _db.query(
+      'materias',
+      orderBy: 'creada DESC, rowid DESC',
+    );
+    final filasApuntes = await _db.query(
+      'apuntes',
+      orderBy: 'creada DESC, rowid DESC',
+    );
 
     final apuntesPorMateria = <String, List<Apunte>>{};
     for (final fila in filasApuntes) {
@@ -164,7 +199,19 @@ class MateriasRepositorySqflite implements MateriasRepository {
 
   @override
   Future<void> borrarMateria(String id) async {
-    await _db.delete('materias', where: 'id = ?', whereArgs: [id]);
+    await _db.transaction((txn) async {
+      await txn.delete(
+        'sesiones_enfoque',
+        where: 'materia_id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        'intentos_quiz',
+        where: 'materia_id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete('materias', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   @override
@@ -207,5 +254,75 @@ class MateriasRepositorySqflite implements MateriasRepository {
   @override
   Future<void> borrarApunte(String id) async {
     await _db.delete('apuntes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  SesionEnfoque _sesionDesdeFila(Map<String, Object?> fila) {
+    return SesionEnfoque(
+      id: fila['id'] as String,
+      materiaId: fila['materia_id'] as String?,
+      inicio: DateTime.fromMillisecondsSinceEpoch(fila['inicio'] as int),
+      duracionSegundos: fila['duracion_segundos'] as int,
+    );
+  }
+
+  IntentoQuiz _intentoDesdeFila(Map<String, Object?> fila) {
+    return IntentoQuiz(
+      id: fila['id'] as String,
+      materiaId: fila['materia_id'] as String,
+      aciertos: fila['aciertos'] as int,
+      total: fila['total'] as int,
+      fecha: DateTime.fromMillisecondsSinceEpoch(fila['fecha'] as int),
+    );
+  }
+
+  @override
+  Future<SesionEnfoque> registrarSesionEnfoque({
+    String? materiaId,
+    required DateTime inicio,
+    required int duracionSegundos,
+  }) async {
+    final fila = <String, Object?>{
+      'id': _nuevoId('ses'),
+      'materia_id': materiaId,
+      'inicio': inicio.millisecondsSinceEpoch,
+      'duracion_segundos': duracionSegundos,
+    };
+    await _db.insert('sesiones_enfoque', fila);
+    return _sesionDesdeFila(fila);
+  }
+
+  @override
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque() async {
+    final filas = await _db.query(
+      'sesiones_enfoque',
+      orderBy: 'inicio DESC, rowid DESC',
+    );
+    return filas.map(_sesionDesdeFila).toList();
+  }
+
+  @override
+  Future<IntentoQuiz> registrarIntentoQuiz({
+    required String materiaId,
+    required int aciertos,
+    required int total,
+  }) async {
+    final fila = <String, Object?>{
+      'id': _nuevoId('qz'),
+      'materia_id': materiaId,
+      'aciertos': aciertos,
+      'total': total,
+      'fecha': DateTime.now().millisecondsSinceEpoch,
+    };
+    await _db.insert('intentos_quiz', fila);
+    return _intentoDesdeFila(fila);
+  }
+
+  @override
+  Future<List<IntentoQuiz>> obtenerIntentosQuiz() async {
+    final filas = await _db.query(
+      'intentos_quiz',
+      orderBy: 'fecha DESC, rowid DESC',
+    );
+    return filas.map(_intentoDesdeFila).toList();
   }
 }

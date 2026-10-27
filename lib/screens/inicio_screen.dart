@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/materia.dart';
+import '../providers/estadisticas_provider.dart';
 import '../providers/materias_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/calculos_estadisticas.dart';
 import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/formulario_materia.dart';
 import '../widgets/materia_card.dart';
@@ -97,6 +99,10 @@ class _InicioScreenState extends State<InicioScreen> {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
     final provider = context.watch<MateriasProvider>();
+    final racha = calcularRacha(
+      context.watch<EstadisticasProvider>().sesiones,
+      DateTime.now(),
+    );
     final todas = provider.materias;
     final materias = _filtrar(todas);
 
@@ -195,6 +201,11 @@ class _InicioScreenState extends State<InicioScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  // --- TARJETA DE RACHA DE ESTUDIO (solo si hay racha) ---
+                  if (racha >= 1) ...[
+                    _TarjetaRacha(dias: racha),
+                    const SizedBox(height: 22),
+                  ],
                   if (provider.cargando)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 60),
@@ -308,6 +319,79 @@ class _InicioScreenState extends State<InicioScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta con los días consecutivos de estudio.
+class _TarjetaRacha extends StatelessWidget {
+  /// Días de racha (al menos 1).
+  final int dias;
+
+  const _TarjetaRacha({required this.dias});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.degradadoRacha,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.rachaFuego.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.25),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Colors.white,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  dias == 1
+                      ? '¡Racha de 1 día activa! 🔥'
+                      : '¡Racha de $dias días activa! 🔥',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tu constancia te acerca a dominar todos tus parciales.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

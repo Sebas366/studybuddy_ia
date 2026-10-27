@@ -1,5 +1,7 @@
 import '../models/apunte.dart';
+import '../models/intento_quiz.dart';
 import '../models/materia.dart';
+import '../models/sesion_enfoque.dart';
 
 /// Contrato de almacenamiento de las materias y apuntes reales del usuario.
 ///
@@ -46,4 +48,26 @@ abstract class MateriasRepository {
 
   /// Borra un apunte.
   Future<void> borrarApunte(String id);
+
+  /// Guarda un bloque de enfoque completado del Pomodoro.
+  ///
+  /// [materiaId] es `null` si se estudió sin materia.
+  Future<SesionEnfoque> registrarSesionEnfoque({
+    String? materiaId,
+    required DateTime inicio,
+    required int duracionSegundos,
+  });
+
+  /// Devuelve todas las sesiones de enfoque, la de inicio más reciente primero.
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque();
+
+  /// Guarda el resultado de un quiz terminado.
+  Future<IntentoQuiz> registrarIntentoQuiz({
+    required String materiaId,
+    required int aciertos,
+    required int total,
+  });
+
+  /// Devuelve todos los intentos de quiz, el más reciente primero.
+  Future<List<IntentoQuiz>> obtenerIntentosQuiz();
 }

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:studybuddy_ia/data/catalogo_materia.dart';
 import 'package:studybuddy_ia/data/materias_repository.dart';
 import 'package:studybuddy_ia/models/apunte.dart';
+import 'package:studybuddy_ia/models/intento_quiz.dart';
 import 'package:studybuddy_ia/models/materia.dart';
+import 'package:studybuddy_ia/models/sesion_enfoque.dart';
 import 'package:studybuddy_ia/utils/formato_fecha.dart';
 
 /// Registro interno de una materia dentro de [RepositorioMemoria].
@@ -33,6 +35,10 @@ class _RegistroMateria {
 class RepositorioMemoria implements MateriasRepository {
   /// Registros en orden de creación inverso (el más nuevo en la posición 0).
   final List<_RegistroMateria> _materias = [];
+
+  /// Sesiones e intentos en orden de registro (el más viejo primero).
+  final List<SesionEnfoque> _sesiones = [];
+  final List<IntentoQuiz> _intentos = [];
   int _contador = 0;
 
   String _nuevoId(String prefijo) => '${prefijo}_${_contador++}';
@@ -60,8 +66,9 @@ class RepositorioMemoria implements MateriasRepository {
       _materias.firstWhere((registro) => registro.id == id);
 
   @override
-  Future<List<Materia>> obtenerMaterias() async =>
-      [for (final registro in _materias) _construir(registro)];
+  Future<List<Materia>> obtenerMaterias() async => [
+    for (final registro in _materias) _construir(registro),
+  ];
 
   @override
   Future<Materia> crearMateria({
@@ -99,6 +106,8 @@ class RepositorioMemoria implements MateriasRepository {
   @override
   Future<void> borrarMateria(String id) async {
     _materias.removeWhere((registro) => registro.id == id);
+    _sesiones.removeWhere((sesion) => sesion.materiaId == id);
+    _intentos.removeWhere((intento) => intento.materiaId == id);
   }
 
   @override
@@ -145,6 +154,60 @@ class RepositorioMemoria implements MateriasRepository {
       registro.apuntes.removeWhere((apunte) => apunte.id == id);
     }
   }
+
+  @override
+  Future<SesionEnfoque> registrarSesionEnfoque({
+    String? materiaId,
+    required DateTime inicio,
+    required int duracionSegundos,
+  }) async {
+    final sesion = SesionEnfoque(
+      id: _nuevoId('ses'),
+      materiaId: materiaId,
+      inicio: inicio,
+      duracionSegundos: duracionSegundos,
+    );
+    _sesiones.add(sesion);
+    return sesion;
+  }
+
+  @override
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque() async {
+    // Más reciente primero; en un empate, la registrada después.
+    final indices = List<int>.generate(_sesiones.length, (i) => i);
+    indices.sort((a, b) {
+      final porInicio = _sesiones[b].inicio.compareTo(_sesiones[a].inicio);
+      return porInicio != 0 ? porInicio : b.compareTo(a);
+    });
+    return [for (final i in indices) _sesiones[i]];
+  }
+
+  @override
+  Future<IntentoQuiz> registrarIntentoQuiz({
+    required String materiaId,
+    required int aciertos,
+    required int total,
+  }) async {
+    final intento = IntentoQuiz(
+      id: _nuevoId('qz'),
+      materiaId: materiaId,
+      aciertos: aciertos,
+      total: total,
+      fecha: DateTime.now(),
+    );
+    _intentos.add(intento);
+    return intento;
+  }
+
+  @override
+  Future<List<IntentoQuiz>> obtenerIntentosQuiz() async {
+    final indices = List<int>.generate(_intentos.length, (i) => i);
+    indices.sort((a, b) {
+      final porFecha = _intentos[b].fecha.compareTo(_intentos[a].fecha);
+      return porFecha != 0 ? porFecha : b.compareTo(a);
+    });
+    return [for (final i in indices) _intentos[i]];
+  }
 }
 
 /// Repositorio en memoria cuyas altas esperan a que la prueba abra una compuerta.
@@ -189,17 +252,88 @@ class RepositorioLento extends RepositorioMemoria {
   }
 }
 
-/// Repositorio en memoria cuya lectura puede fallar a demanda.
+/// Repositorio en memoria cuya lectura y escritura pueden fallar a demanda.
 ///
-/// Sirve para probar qué pasa cuando la base de datos no responde al cargar
-/// las materias, sin impedir que las altas y bajas se sigan guardando.
+/// Sirve para probar qué pasa cuando la base de datos no responde, sin impedir
+/// que el resto de operaciones sigan funcionando.
 class RepositorioInestable extends RepositorioMemoria {
-  /// Mientras sea `true`, [obtenerMaterias] lanza una excepción.
+  /// Mientras sea `true`, las lecturas lanzan una excepción.
   bool fallarLectura = false;
+
+  /// Mientras sea `true`, registrar sesiones e intentos lanza una excepción.
+  bool fallarEscritura = false;
 
   @override
   Future<List<Materia>> obtenerMaterias() async {
     if (fallarLectura) throw StateError('Fallo simulado de lectura');
     return super.obtenerMaterias();
   }
+
+  @override
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque() async {
+    if (fallarLectura) throw StateError('Fallo simulado de lectura');
+    return super.obtenerSesionesEnfoque();
+  }
+
+  @override
+  Future<List<IntentoQuiz>> obtenerIntentosQuiz() async {
+    if (fallarLectura) throw StateError('Fallo simulado de lectura');
+    return super.obtenerIntentosQuiz();
+  }
+
+  @override
+  Future<SesionEnfoque> registrarSesionEnfoque({
+    String? materiaId,
+    required DateTime inicio,
+    required int duracionSegundos,
+  }) async {
+    if (fallarEscritura) throw StateError('Fallo simulado de escritura');
+    return super.registrarSesionEnfoque(
+      materiaId: materiaId,
+      inicio: inicio,
+      duracionSegundos: duracionSegundos,
+    );
+  }
+
+  @override
+  Future<IntentoQuiz> registrarIntentoQuiz({
+    required String materiaId,
+    required int aciertos,
+    required int total,
+  }) async {
+    if (fallarEscritura) throw StateError('Fallo simulado de escritura');
+    return super.registrarIntentoQuiz(
+      materiaId: materiaId,
+      aciertos: aciertos,
+      total: total,
+    );
+  }
+}
+
+/// Repositorio en memoria cuya próxima lectura se entrega tarde, a voluntad de la prueba.
+///
+/// La lectura retenida toma su "foto" de los datos en el momento de empezar y
+/// la devuelve cuando la prueba completa la compuerta; sirve para simular una
+/// recarga lenta que termina después de otra más nueva.
+class RepositorioLecturaLenta extends RepositorioMemoria {
+  Completer<void>? _retenida;
+
+  /// La próxima lectura de materias o sesiones queda en espera hasta completar lo devuelto.
+  Completer<void> retenerProximaLectura() => _retenida = Completer<void>();
+
+  Future<T> _conRetencion<T>(Future<T> foto) async {
+    final resultado = await foto;
+    final compuerta = _retenida;
+    _retenida = null;
+    if (compuerta != null) await compuerta.future;
+    return resultado;
+  }
+
+  @override
+  Future<List<Materia>> obtenerMaterias() =>
+      _conRetencion(super.obtenerMaterias());
+
+  @override
+  Future<List<SesionEnfoque>> obtenerSesionesEnfoque() =>
+      _conRetencion(super.obtenerSesionesEnfoque());
 }
