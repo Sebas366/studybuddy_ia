@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../models/materia.dart';
 import '../models/pregunta.dart';
+import '../providers/estadisticas_provider.dart';
 import '../theme/app_colors.dart';
 import 'resultados_quiz_screen.dart';
 
@@ -13,10 +18,7 @@ class QuizScreen extends StatefulWidget {
   /// Materia de la cual se cargará el banco de preguntas.
   final Materia materia;
 
-  const QuizScreen({
-    super.key,
-    required this.materia,
-  });
+  const QuizScreen({super.key, required this.materia});
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -37,6 +39,9 @@ class _QuizScreenState extends State<QuizScreen> {
 
   /// Puntos acumulados en la sesión (200 puntos por acierto).
   int _puntosTotales = 0;
+
+  /// Evita guardar dos veces el mismo intento si se toca "Ver resultados" dos veces.
+  bool _finalizado = false;
 
   /// Lista de preguntas a resolver.
   List<Pregunta> get _preguntas => widget.materia.preguntas;
@@ -69,6 +74,18 @@ class _QuizScreenState extends State<QuizScreen> {
         _haComprobado = false;
       });
     } else {
+      if (_finalizado) return;
+      _finalizado = true;
+
+      // Se guarda el resultado sin esperar: si falla, igual se muestran los resultados.
+      unawaited(
+        context.read<EstadisticasProvider>().registrarIntentoQuiz(
+          materiaId: widget.materia.id,
+          aciertos: _respuestasCorrectas,
+          total: _preguntas.length,
+        ),
+      );
+
       // Reemplazamos la pantalla actual por la pantalla final de resultados
       Navigator.pushReplacement(
         context,
@@ -179,8 +196,10 @@ class _QuizScreenState extends State<QuizScreen> {
             // --- CONTENIDO DESPLAZABLE DEL QUIZ ---
             Expanded(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -189,8 +208,9 @@ class _QuizScreenState extends State<QuizScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color:
-                            esOscuro ? const Color(0xFF23202B) : Colors.white,
+                        color: esOscuro
+                            ? const Color(0xFF23202B)
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
                           color: esOscuro
@@ -199,8 +219,9 @@ class _QuizScreenState extends State<QuizScreen> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black
-                                .withValues(alpha: esOscuro ? 0.3 : 0.04),
+                            color: Colors.black.withValues(
+                              alpha: esOscuro ? 0.3 : 0.04,
+                            ),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -309,9 +330,10 @@ class _QuizScreenState extends State<QuizScreen> {
                     backgroundColor: _haComprobado
                         ? AppColors.primario
                         : (_opcionSeleccionada != null
-                            ? AppColors.primario
-                            : (esOscuro ? Colors.white12 : Colors.grey[300])),
-                    foregroundColor: _haComprobado || _opcionSeleccionada != null
+                              ? AppColors.primario
+                              : (esOscuro ? Colors.white12 : Colors.grey[300])),
+                    foregroundColor:
+                        _haComprobado || _opcionSeleccionada != null
                         ? Colors.white
                         : Colors.grey,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -322,13 +344,13 @@ class _QuizScreenState extends State<QuizScreen> {
                   onPressed: _haComprobado
                       ? _avanzarOSiguiente
                       : (_opcionSeleccionada != null
-                          ? _comprobarRespuesta
-                          : null),
+                            ? _comprobarRespuesta
+                            : null),
                   child: Text(
                     _haComprobado
                         ? (_indicePreguntaActual < _preguntas.length - 1
-                            ? 'Siguiente pregunta'
-                            : 'Ver resultados')
+                              ? 'Siguiente pregunta'
+                              : 'Ver resultados')
                         : 'Comprobar respuesta',
                     style: const TextStyle(
                       fontSize: 15,
@@ -437,8 +459,9 @@ class _QuizScreenState extends State<QuizScreen> {
                     _preguntaActual.opciones[indice],
                     style: tema.textTheme.bodyMedium?.copyWith(
                       fontSize: 14,
-                      fontWeight:
-                          esSeleccionada ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: esSeleccionada
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                 ),
