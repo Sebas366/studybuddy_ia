@@ -20,6 +20,7 @@ class DatosDemo {
     // -------------------------------------------------------------
     Materia(
       id: 'mat_1',
+      esDemo: true,
       nombre: 'Arquitectura de Computadores',
       subtitulo: 'Laboratorios MIPS • 1 Quiz pendiente',
       descripcion:
@@ -153,6 +154,7 @@ class DatosDemo {
     // -------------------------------------------------------------
     Materia(
       id: 'mat_2',
+      esDemo: true,
       nombre: 'Bootcamp IA y Datos',
       subtitulo: 'Análisis de Datos • Resumen listo',
       descripcion:
@@ -287,6 +289,7 @@ class DatosDemo {
     // -------------------------------------------------------------
     Materia(
       id: 'mat_3',
+      esDemo: true,
       nombre: 'Desarrollo Móvil',
       subtitulo: 'Proyecto Flutter • En progreso',
       descripcion:

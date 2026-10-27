@@ -40,6 +40,18 @@ class Materia {
   /// Respuestas simuladas que el Tutor IA utilizará al dialogar sobre esta materia.
   final List<String> respuestasSimuladasIa;
 
+  /// Indica si es una materia de demostración (datos de `DatosDemo`).
+  ///
+  /// Las materias de demostración no se guardan en la base de datos y conservan
+  /// sus pantallas simuladas de IA; las reales muestran el aviso de la Fase 3.
+  final bool esDemo;
+
+  /// Índice del degradado elegido en el catálogo de colores.
+  final int colorIndice;
+
+  /// Clave del icono elegido en el catálogo de iconos.
+  final String iconoClave;
+
   const Materia({
     required this.id,
     required this.nombre,
@@ -52,7 +64,17 @@ class Materia {
     required this.apuntes,
     required this.preguntas,
     required this.respuestasSimuladasIa,
+    this.esDemo = false,
+    this.colorIndice = 0,
+    this.iconoClave = 'libro',
   });
+
+  /// Texto de subtítulo según la cantidad de apuntes (ej. "3 apuntes").
+  static String subtituloPorConteo(int cantidad) {
+    if (cantidad == 0) return 'Sin apuntes';
+    if (cantidad == 1) return '1 apunte';
+    return '$cantidad apuntes';
+  }
 
   /// Devuelve la lista de colores del degradado para usar directamente en BoxDecoration.
   List<Color> get coloresDegradado => [colorInicio, colorFin];
