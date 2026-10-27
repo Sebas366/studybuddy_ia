@@ -1,17 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/apunte.dart';
 import '../models/materia.dart';
+import '../providers/materias_provider.dart';
 import '../widgets/accion_card.dart';
+import '../widgets/aviso_ia_fase3.dart';
+import '../widgets/dialogo_confirmar_borrado.dart';
+import '../widgets/formulario_materia.dart';
+import 'apunte_screen.dart';
+import 'formulario_apunte_screen.dart';
 import 'resumen_ia_screen.dart';
 import 'quiz_screen.dart';
 import 'chat_tutor_screen.dart';
 import 'pomodoro_screen.dart';
+
+/// Acciones del menú de la cabecera de una materia real.
+enum _AccionMateria { editar, borrar }
+
+/// Acciones al mantener pulsado un apunte real.
+enum _AccionApunte { editar, borrar }
 
 /// Pantalla detallada de una materia seleccionada.
 ///
 /// Dispone de cabecera con degradado distintivo, Hero en el icono,
 /// cuadrícula 2x2 para herramientas de IA (Resumir, Quiz IA, Tutor IA, Pomodoro),
 /// listado interactivo de apuntes y botón flotante de escaneo con IA.
-class DetalleMateriaScreen extends StatelessWidget {
+///
+/// Las materias de demostración (`esDemo`) se muestran tal cual. Las reales se
+/// leen en vivo del [MateriasProvider] y permiten editar, borrar y gestionar apuntes.
+class DetalleMateriaScreen extends StatefulWidget {
   /// Materia seleccionada cuyos datos se presentarán.
   final Materia materia;
 
@@ -21,9 +38,110 @@ class DetalleMateriaScreen extends StatelessWidget {
   });
 
   @override
+  State<DetalleMateriaScreen> createState() => _DetalleMateriaScreenState();
+}
+
+class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
+  /// Evita cerrar la pantalla más de una vez cuando la materia deja de existir.
+  bool _cerrando = false;
+
+  /// Atiende el menú de la cabecera: editar o borrar la materia real.
+  Future<void> _alElegirAccionMateria(
+      _AccionMateria accion, Materia materia) async {
+    switch (accion) {
+      case _AccionMateria.editar:
+        await mostrarFormularioMateria(context, materia: materia);
+      case _AccionMateria.borrar:
+        final provider = context.read<MateriasProvider>();
+        final confirmado = await confirmarBorrado(
+          context,
+          titulo: 'Borrar materia',
+          mensaje: mensajeBorradoMateria(materia.nombre, materia.apuntes.length),
+        );
+        // La pantalla se cierra sola cuando la materia desaparece del provider.
+        if (confirmado) await provider.borrarMateria(materia.id);
+    }
+  }
+
+  /// Abre el formulario para crear un apunte nuevo en la materia.
+  void _crearApunte(Materia materia) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FormularioApunteScreen(materiaId: materia.id),
+      ),
+    );
+  }
+
+  /// Abre la hoja con las opciones "Editar" y "Borrar" de un apunte real.
+  Future<void> _mostrarOpcionesApunte(Apunte apunte) async {
+    final accion = await showModalBottomSheet<_AccionApunte>(
+      context: context,
+      builder: (contextHoja) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('opcion-editar-apunte'),
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Editar'),
+              onTap: () => Navigator.pop(contextHoja, _AccionApunte.editar),
+            ),
+            ListTile(
+              key: const Key('opcion-borrar-apunte'),
+              leading: const Icon(Icons.delete_outline_rounded),
+              title: const Text('Borrar'),
+              onTap: () => Navigator.pop(contextHoja, _AccionApunte.borrar),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || accion == null) return;
+
+    switch (accion) {
+      case _AccionApunte.editar:
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FormularioApunteScreen(
+              materiaId: apunte.materiaId,
+              apunte: apunte,
+            ),
+          ),
+        );
+      case _AccionApunte.borrar:
+        final provider = context.read<MateriasProvider>();
+        final confirmado = await confirmarBorrado(
+          context,
+          titulo: 'Borrar apunte',
+          mensaje:
+              'Se borrará "${apunte.titulo}". Esta acción no se puede deshacer.',
+        );
+        if (confirmado) await provider.borrarApunte(apunte.id);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
+
+    // Las materias reales se leen en vivo; si ya no existen, se cierra la pantalla.
+    var materia = widget.materia;
+    if (!materia.esDemo) {
+      final viva = context.watch<MateriasProvider>().porId(materia.id);
+      if (viva == null) {
+        if (!_cerrando) {
+          _cerrando = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).maybePop();
+          });
+        }
+        return const Scaffold();
+      }
+      materia = viva;
+    }
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -68,6 +186,39 @@ class DetalleMateriaScreen extends StatelessWidget {
                 ),
                 onPressed: () => Navigator.pop(context),
               ),
+              actions: [
+                // Solo las materias reales se pueden editar o borrar
+                if (!materia.esDemo)
+                  PopupMenuButton<_AccionMateria>(
+                    key: const Key('menu-materia'),
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_vert_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                    onSelected: (accion) =>
+                        _alElegirAccionMateria(accion, materia),
+                    itemBuilder: (contextMenu) => const [
+                      PopupMenuItem(
+                        key: Key('menu-editar-materia'),
+                        value: _AccionMateria.editar,
+                        child: Text('Editar materia'),
+                      ),
+                      PopupMenuItem(
+                        key: Key('menu-borrar-materia'),
+                        value: _AccionMateria.borrar,
+                        child: Text('Borrar materia'),
+                      ),
+                    ],
+                  ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
                   decoration: BoxDecoration(
@@ -130,35 +281,39 @@ class DetalleMateriaScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      // Barra de progreso dentro del banner
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: LinearProgressIndicator(
-                                value: materia.progreso,
-                                minHeight: 6,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.25),
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
+                      // El progreso real llega en la Parte 2; solo las materias demo lo muestran
+                      if (materia.esDemo) ...[
+                        const SizedBox(height: 16),
+                        // Barra de progreso dentro del banner
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: LinearProgressIndicator(
+                                  value: materia.progreso,
+                                  minHeight: 6,
+                                  backgroundColor:
+                                      Colors.white.withValues(alpha: 0.25),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '${(materia.progreso * 100).toInt()}% dominado',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                            const SizedBox(width: 12),
+                            Text(
+                              '${(materia.progreso * 100).toInt()}% dominado',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -195,6 +350,10 @@ class DetalleMateriaScreen extends StatelessWidget {
                           icono: Icons.auto_awesome_rounded,
                           colorTema: const Color(0xFF6750A4),
                           onTap: () {
+                            if (!materia.esDemo) {
+                              mostrarAvisoIaFase3(context);
+                              return;
+                            }
                             if (materia.apuntes.isNotEmpty) {
                               Navigator.push(
                                 context,
@@ -219,10 +378,16 @@ class DetalleMateriaScreen extends StatelessWidget {
                         // Acción 2: Quiz IA
                         AccionCard(
                           titulo: 'Quiz IA',
-                          subtitulo: '${materia.preguntas.length} preguntas',
+                          subtitulo: materia.esDemo
+                              ? '${materia.preguntas.length} preguntas'
+                              : 'Próximamente',
                           icono: Icons.quiz_rounded,
                           colorTema: const Color(0xFFE65100),
                           onTap: () {
+                            if (!materia.esDemo) {
+                              mostrarAvisoIaFase3(context);
+                              return;
+                            }
                             if (materia.preguntas.isNotEmpty) {
                               Navigator.push(
                                 context,
@@ -249,6 +414,10 @@ class DetalleMateriaScreen extends StatelessWidget {
                           icono: Icons.support_agent_rounded,
                           colorTema: const Color(0xFF00897B),
                           onTap: () {
+                            if (!materia.esDemo) {
+                              mostrarAvisoIaFase3(context);
+                              return;
+                            }
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -297,14 +466,32 @@ class DetalleMateriaScreen extends StatelessWidget {
                           fontSize: 17,
                         ),
                       ),
-                      Text(
-                        'Toca para ver el resumen',
-                        style: tema.textTheme.labelSmall?.copyWith(
-                          color: esOscuro ? Colors.white54 : Colors.black45,
+                      if (materia.esDemo)
+                        Text(
+                          'Toca para ver el resumen',
+                          style: tema.textTheme.labelSmall?.copyWith(
+                            color: esOscuro ? Colors.white54 : Colors.black45,
+                          ),
+                        )
+                      else
+                        TextButton.icon(
+                          key: const Key('nuevo-apunte'),
+                          onPressed: () => _crearApunte(materia),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          label: const Text(
+                            'Nuevo',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
-                      ),
                     ],
                   ),
+                  if (!materia.esDemo && materia.apuntes.isNotEmpty)
+                    Text(
+                      'Mantén pulsado un apunte para editar o borrar',
+                      style: tema.textTheme.labelSmall?.copyWith(
+                        color: esOscuro ? Colors.white54 : Colors.black45,
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   if (materia.apuntes.isEmpty) ...[
                     Container(
@@ -315,9 +502,11 @@ class DetalleMateriaScreen extends StatelessWidget {
                             : Colors.white,
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'No hay apuntes cargados aún. Usa el botón "Escanear" para agregar.',
+                          materia.esDemo
+                              ? 'No hay apuntes cargados aún. Usa el botón "Escanear" para agregar.'
+                              : 'Aún no tienes apuntes. Toca "+ Nuevo" para crear el primero.',
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -375,7 +564,9 @@ class DetalleMateriaScreen extends StatelessWidget {
                             subtitle: Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                '${apunte.fecha} • ${apunte.ideasClave.length} ideas clave',
+                                materia.esDemo
+                                    ? '${apunte.fecha} • ${apunte.ideasClave.length} ideas clave'
+                                    : apunte.fecha,
                                 style: tema.textTheme.bodySmall?.copyWith(
                                   color: esOscuro
                                       ? Colors.white60
@@ -388,17 +579,27 @@ class DetalleMateriaScreen extends StatelessWidget {
                               Icons.chevron_right_rounded,
                               size: 20,
                             ),
+                            // Los apuntes de demostración abren el resumen simulado;
+                            // los reales, su texto con el aviso de IA.
                             onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ResumenIaScreen(
-                                    apunte: apunte,
-                                    materia: materia,
-                                  ),
+                                  builder: (context) => materia.esDemo
+                                      ? ResumenIaScreen(
+                                          apunte: apunte,
+                                          materia: materia,
+                                        )
+                                      : ApunteScreen(
+                                          apunte: apunte,
+                                          materia: materia,
+                                        ),
                                 ),
                               );
                             },
+                            onLongPress: materia.esDemo
+                                ? null
+                                : () => _mostrarOpcionesApunte(apunte),
                           ),
                         ),
                       ),

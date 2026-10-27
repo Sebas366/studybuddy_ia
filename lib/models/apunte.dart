@@ -30,15 +30,16 @@ class Apunte {
   /// Resumen extenso y detallado para un repaso exhaustivo.
   final String resumenDetallado;
 
+  /// Los campos de IA son opcionales: un apunte real los deja vacíos hasta la Fase 3.
   const Apunte({
     required this.id,
     required this.titulo,
     required this.materiaId,
     required this.fecha,
     required this.contenido,
-    required this.ideasClave,
-    required this.resumenCorto,
-    required this.resumenMedio,
-    required this.resumenDetallado,
+    this.ideasClave = const [],
+    this.resumenCorto = '',
+    this.resumenMedio = '',
+    this.resumenDetallado = '',
   });
 }
