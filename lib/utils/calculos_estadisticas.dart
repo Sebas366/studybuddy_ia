@@ -114,3 +114,32 @@ IntentoQuiz? mejorIntento(List<IntentoQuiz> intentos, String materiaId) {
   }
   return mejor;
 }
+
+/// Segundos que representan [horas] (para decidir si se muestra en horas o menos).
+int _segundosDe(double horas) => (horas * 3600).round();
+
+/// Total de la semana: en horas si llega a una hora; si no, en minutos o segundos.
+///
+/// Con cero queda `0 horas`.
+String formatearTiempoSemanal(double horas) {
+  final segundos = _segundosDe(horas);
+  if (segundos == 0) return '0 horas';
+  if (segundos < 3600) return formatearDuracion(segundos);
+  return '${formatearHoras(horas)} horas';
+}
+
+/// Valor del día pico: `1.5 h` desde una hora; antes de eso, minutos o segundos.
+String formatearPico(double horas) {
+  final segundos = _segundosDe(horas);
+  if (segundos < 3600) return formatearDuracion(segundos);
+  return '${formatearHoras(horas)} h';
+}
+
+/// Etiqueta corta sobre cada barra: `1.5h`, `12m`, `45s` o `0h`.
+String etiquetaBarra(double horas) {
+  final segundos = _segundosDe(horas);
+  if (segundos == 0) return '0h';
+  if (segundos < 60) return '${segundos}s';
+  if (segundos < 3600) return '${segundos ~/ 60}m';
+  return '${formatearHoras(horas)}h';
+}

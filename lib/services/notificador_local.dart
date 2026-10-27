@@ -91,23 +91,21 @@ class NotificadorLocal implements NotificadorPomodoro {
     required String titulo,
     required String cuerpo,
   }) async {
-    try {
-      await _programarCon(
-        AndroidScheduleMode.exactAllowWhileIdle,
-        fin,
-        titulo,
-        cuerpo,
-      );
-    } catch (_) {
-      // Si el sistema rechaza la alarma exacta, se usa una aproximada.
+    // Se prueba del modo más fiable al menos: la alarma de reloj no la congelan
+    // ni la retrasan los ahorros de batería (algunos celulares congelan las apps
+    // en segundo plano y no entregan las alarmas comunes).
+    const modos = [
+      AndroidScheduleMode.alarmClock,
+      AndroidScheduleMode.exactAllowWhileIdle,
+      AndroidScheduleMode.inexactAllowWhileIdle,
+    ];
+    for (final modo in modos) {
       try {
-        await _programarCon(
-          AndroidScheduleMode.inexactAllowWhileIdle,
-          fin,
-          titulo,
-          cuerpo,
-        );
-      } catch (_) {}
+        await _programarCon(modo, fin, titulo, cuerpo);
+        return;
+      } catch (_) {
+        // Si el sistema rechaza este tipo de alarma, se intenta con el siguiente.
+      }
     }
   }
 

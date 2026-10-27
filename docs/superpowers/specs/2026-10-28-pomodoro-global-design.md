@@ -47,8 +47,14 @@ no hay ningún aviso al terminar, y si Android cierra la app el bloque en curso 
 - **[Decisión de Claude]** Pausar a medias también se guarda; reiniciar, saltar o cambiar de modo borran el estado.
 - **[Decisión de Claude]** Se pide el permiso de notificaciones (Android 13+) la primera vez que se inicia un
   bloque. Si se niega, el Pomodoro funciona igual, sin aviso.
-- **[Decisión de Claude]** Alarma exacta con `USE_EXACT_ALARM` (sin pedir ajustes especiales); si el sistema la
-  rechaza, se usa una alarma aproximada.
+- **[Decisión de Claude]** Se usa una **alarma de reloj** (`setAlarmClock`, permiso `USE_EXACT_ALARM`, sin pedir
+  ajustes especiales); si el sistema la rechaza, una alarma exacta y luego una aproximada. Motivo, verificado en el
+  celular de Edwin (Vivo, Android 16): el sistema **congela** la app a los ~10 s en segundo plano y **no entregó**
+  la alarma exacta común (`Reason=frozen`); la alarma de reloj sí llegó. Efecto secundario: Android muestra el
+  ícono de alarma y puede mostrar el bloque como "próxima alarma" mientras corre.
+- **[Decisión de Claude]** La alarma se programa **antes** de pedir el permiso de notificaciones (no espera la
+  respuesta del diálogo), y el permiso se pide al abrir la pantalla del Pomodoro: con bloques de 15 s, el bloque
+  terminaba con el diálogo aún abierto y quedaba sin aviso.
 - **[Decisión de Claude]** Al volver a la app se descarta la notificación (para detener la vibración) y, si hay un
   bloque corriendo, se reprograma su alarma.
 

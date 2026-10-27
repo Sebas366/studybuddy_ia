@@ -70,7 +70,7 @@ Las pruebas del repositorio SQLite se ejecutan en el computador con `sqflite_com
 
 ## Aviso del Pomodoro en el celular
 
-La notificación usa una alarma exacta del sistema y pide el permiso de notificaciones la primera vez que inicias un bloque. Algunos celulares (Vivo, Xiaomi y similares) retrasan o bloquean alarmas si la app tiene ahorro de batería: si el aviso no suena a tiempo, en los ajustes del celular marca StudyBuddy IA como "sin restricciones" de batería.
+La notificación usa una alarma de reloj del sistema (por eso Android muestra un ícono de alarma mientras corre un bloque) y pide el permiso de notificaciones la primera vez que abres el Pomodoro. Con ella, el aviso llega aunque el celular congele la app en segundo plano. Algunos celulares (Vivo, Xiaomi y similares) retrasan o bloquean alarmas si la app tiene ahorro de batería: si el aviso no suena a tiempo, en los ajustes del celular marca StudyBuddy IA como "sin restricciones" de batería.
 
 ## Autor
 

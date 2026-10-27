@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:studybuddy_ia/utils/calculos_estadisticas.dart';
+
 import 'support/abrir_app.dart';
 import 'support/repositorio_memoria.dart';
 
@@ -164,4 +166,23 @@ void main() {
     expect(find.text('No se pudieron cargar tus estadísticas.'), findsNothing);
     expect(find.text('1 h'), findsOneWidget);
   });
+
+  testWidgets(
+    'Con bloques cortos la gráfica muestra segundos, no horas en cero',
+    (WidgetTester tester) async {
+      final repositorio = RepositorioMemoria();
+      // Un bloque de demostración de 45 s que terminó hoy.
+      await repositorio.registrarSesionEnfoque(
+        inicio: DateTime.now().subtract(const Duration(seconds: 45)),
+        duracionSegundos: 45,
+      );
+      await abrirStats(tester, repositorio);
+
+      final dia = nombresDiasCortos[DateTime.now().weekday - 1];
+      expect(find.text('Total de 45 s esta semana'), findsOneWidget);
+      expect(find.text('Pico: $dia (45 s)'), findsOneWidget);
+      expect(find.text('45s'), findsOneWidget); // etiqueta de la barra
+      expect(find.text('Total de 0 horas esta semana'), findsNothing);
+    },
+  );
 }

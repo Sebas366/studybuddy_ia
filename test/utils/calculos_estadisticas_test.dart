@@ -185,6 +185,28 @@ void main() {
     });
   });
 
+  group('formatos de la gráfica semanal', () {
+    test('el total semanal usa segundos o minutos si es menos de una hora', () {
+      expect(formatearTiempoSemanal(0), '0 horas');
+      expect(formatearTiempoSemanal(45 / 3600), '45 s');
+      expect(formatearTiempoSemanal(12 * 60 / 3600), '12 min');
+      expect(formatearTiempoSemanal(2.5), '2.5 horas');
+    });
+
+    test('el pico usa segundos o minutos si es menos de una hora', () {
+      expect(formatearPico(45 / 3600), '45 s');
+      expect(formatearPico(12 * 60 / 3600), '12 min');
+      expect(formatearPico(1.5), '1.5 h');
+    });
+
+    test('la etiqueta de cada barra es corta', () {
+      expect(etiquetaBarra(0), '0h');
+      expect(etiquetaBarra(45 / 3600), '45s');
+      expect(etiquetaBarra(12 * 60 / 3600), '12m');
+      expect(etiquetaBarra(1.5), '1.5h');
+    });
+  });
+
   group('mejorIntento', () {
     test('elige el de mayor proporción de aciertos', () {
       final intentos = [
