@@ -4,29 +4,36 @@ import 'package:provider/provider.dart';
 import '../data/catalogo_materia.dart';
 import '../models/materia.dart';
 import '../providers/materias_provider.dart';
+import '../utils/semestres.dart';
 import '../utils/validadores.dart';
 
 /// Muestra la hoja modal para crear una materia nueva o editar una existente.
 ///
 /// Si se pasa [materia], el formulario se abre con sus datos y guarda los cambios;
-/// si no, crea una materia nueva.
-Future<void> mostrarFormularioMateria(
+/// si no, crea una materia nueva con [semestreInicial] (o el semestre actual del
+/// calendario si no se indica).
+///
+/// Devuelve el semestre con el que se guardó la materia, o `null` si se canceló.
+Future<String?> mostrarFormularioMateria(
   BuildContext context, {
   Materia? materia,
+  String? semestreInicial,
 }) {
-  return showModalBottomSheet<void>(
+  return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (contextModal) => _FormularioMateria(materia: materia),
+    builder: (contextModal) =>
+        _FormularioMateria(materia: materia, semestreInicial: semestreInicial),
   );
 }
 
-/// Contenido de la hoja modal: nombre, descripción, color e icono.
+/// Contenido de la hoja modal: nombre, descripción, semestre, color e icono.
 class _FormularioMateria extends StatefulWidget {
   final Materia? materia;
+  final String? semestreInicial;
 
-  const _FormularioMateria({this.materia});
+  const _FormularioMateria({this.materia, this.semestreInicial});
 
   @override
   State<_FormularioMateria> createState() => _FormularioMateriaState();
@@ -36,6 +43,7 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _controladorNombre;
   late final TextEditingController _controladorDescripcion;
+  late final TextEditingController _controladorSemestre;
   late int _colorIndice;
   late String _iconoClave;
 
@@ -52,6 +60,12 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
     _controladorDescripcion = TextEditingController(
       text: materia?.descripcion ?? '',
     );
+    _controladorSemestre = TextEditingController(
+      text:
+          materia?.semestre ??
+          widget.semestreInicial ??
+          semestreActual(DateTime.now()),
+    );
     _colorIndice = materia?.colorIndice ?? 0;
     _iconoClave = materia?.iconoClave ?? CatalogoMateria.iconoPorDefecto;
   }
@@ -60,6 +74,7 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
   void dispose() {
     _controladorNombre.dispose();
     _controladorDescripcion.dispose();
+    _controladorSemestre.dispose();
     super.dispose();
   }
 
@@ -72,6 +87,7 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
     final mensajero = ScaffoldMessenger.of(context);
     final navegador = Navigator.of(context);
     final nombre = _controladorNombre.text.trim();
+    final semestre = _controladorSemestre.text.trim();
 
     try {
       if (_esEdicion) {
@@ -81,6 +97,7 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
           descripcion: _controladorDescripcion.text,
           colorIndice: _colorIndice,
           iconoClave: _iconoClave,
+          semestre: semestre,
         );
       } else {
         await provider.crearMateria(
@@ -88,6 +105,7 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
           descripcion: _controladorDescripcion.text,
           colorIndice: _colorIndice,
           iconoClave: _iconoClave,
+          semestre: semestre,
         );
       }
     } catch (_) {
@@ -101,7 +119,7 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
       return;
     }
 
-    navegador.pop();
+    navegador.pop(semestre);
     mensajero.showSnackBar(
       SnackBar(
         content: Text(
@@ -112,6 +130,14 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// Semestres que se ofrecen como atajo: los que ya existen y el actual del calendario.
+  List<String> _sugerenciasDeSemestre(BuildContext context) {
+    final sugerencias = [...context.read<MateriasProvider>().semestres];
+    final actual = semestreActual(DateTime.now());
+    if (!sugerencias.contains(actual)) sugerencias.add(actual);
+    return sugerencias;
   }
 
   @override
@@ -186,6 +212,33 @@ class _FormularioMateriaState extends State<_FormularioMateria> {
                     hintText: 'Qué se ve en la materia...',
                     prefixIcon: Icon(Icons.description_rounded),
                   ),
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  key: const Key('campo-semestre'),
+                  controller: _controladorSemestre,
+                  validator: validarSemestre,
+                  decoration: const InputDecoration(
+                    labelText: 'Semestre',
+                    hintText: 'Ej. 2026-2',
+                    prefixIcon: Icon(Icons.school_rounded),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final semestre in _sugerenciasDeSemestre(context))
+                      ActionChip(
+                        key: Key('sugerencia-semestre-$semestre'),
+                        label: Text(semestre),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => setState(() {
+                          _controladorSemestre.text = semestre;
+                        }),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 Text('Color', style: etiqueta),

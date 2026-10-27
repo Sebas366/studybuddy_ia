@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studybuddy_ia/providers/materias_provider.dart';
+import 'package:studybuddy_ia/utils/semestres.dart';
 
 import '../support/repositorio_memoria.dart';
 
@@ -172,6 +173,7 @@ void main() {
         descripcion: '',
         colorIndice: 0,
         iconoClave: 'libro',
+        semestre: '2026-2',
       );
       await proveedor.cargar(); // recarga más nueva: ve la materia
 
@@ -181,4 +183,70 @@ void main() {
       expect(proveedor.materias, hasLength(1));
     },
   );
+
+  group('semestres', () {
+    test('sin semestre usa el semestre actual del calendario', () async {
+      await provider.cargar();
+
+      await provider.crearMateria(nombre: 'Redes');
+
+      expect(provider.materias.single.semestre, semestreActual(DateTime.now()));
+    });
+
+    test('guarda el semestre indicado sin espacios sobrantes', () async {
+      await provider.cargar();
+
+      await provider.crearMateria(nombre: 'Redes', semestre: '  2025-1  ');
+
+      expect(provider.materias.single.semestre, '2025-1');
+    });
+
+    test('un semestre vacío lanza ArgumentError y no guarda nada', () async {
+      await provider.cargar();
+
+      await expectLater(
+        provider.crearMateria(nombre: 'Redes', semestre: '   '),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(provider.materias, isEmpty);
+    });
+
+    test('semestres devuelve los distintos, empezando por el de la materia más reciente', () async {
+      await provider.cargar();
+      await provider.crearMateria(nombre: 'A', semestre: '2026-2');
+      await provider.crearMateria(nombre: 'B', semestre: '2026-1');
+      await provider.crearMateria(nombre: 'C', semestre: '2026-2');
+
+      expect(provider.semestres, ['2026-2', '2026-1']);
+
+      await provider.crearMateria(nombre: 'D', semestre: '2026-1');
+      expect(provider.semestres, ['2026-1', '2026-2']);
+    });
+
+    test('actualizarMateria sin semestre conserva el que tenía', () async {
+      await provider.cargar();
+      await provider.crearMateria(nombre: 'Redes', semestre: '2025-2');
+      final id = provider.materias.single.id;
+
+      await provider.actualizarMateria(id: id, nombre: 'Redes II');
+
+      expect(provider.materias.single.nombre, 'Redes II');
+      expect(provider.materias.single.semestre, '2025-2');
+    });
+
+    test('actualizarMateria cambia el semestre cuando se indica', () async {
+      await provider.cargar();
+      await provider.crearMateria(nombre: 'Redes', semestre: '2025-2');
+      final id = provider.materias.single.id;
+
+      await provider.actualizarMateria(
+        id: id,
+        nombre: 'Redes',
+        semestre: '2026-1',
+      );
+
+      expect(provider.materias.single.semestre, '2026-1');
+    });
+  });
 }

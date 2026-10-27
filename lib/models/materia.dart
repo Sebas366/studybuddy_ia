@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'apunte.dart';
 import 'pregunta.dart';
 
@@ -52,6 +53,9 @@ class Materia {
   /// Clave del icono elegido en el catálogo de iconos.
   final String iconoClave;
 
+  /// Semestre al que pertenece la materia (ej. `2026-2`); vacío en las de demostración.
+  final String semestre;
+
   const Materia({
     required this.id,
     required this.nombre,
@@ -67,6 +71,7 @@ class Materia {
     this.esDemo = false,
     this.colorIndice = 0,
     this.iconoClave = 'libro',
+    this.semestre = '',
   });
 
   /// Texto de subtítulo según la cantidad de apuntes (ej. "3 apuntes").

@@ -16,6 +16,7 @@ class _RegistroMateria {
     required this.descripcion,
     required this.colorIndice,
     required this.iconoClave,
+    required this.semestre,
   });
 
   final String id;
@@ -23,6 +24,7 @@ class _RegistroMateria {
   String descripcion;
   int colorIndice;
   String iconoClave;
+  String semestre;
 
   /// Apuntes de la materia, el más nuevo primero.
   final List<Apunte> apuntes = [];
@@ -59,6 +61,7 @@ class RepositorioMemoria implements MateriasRepository {
       respuestasSimuladasIa: const [],
       colorIndice: registro.colorIndice,
       iconoClave: registro.iconoClave,
+      semestre: registro.semestre,
     );
   }
 
@@ -76,6 +79,7 @@ class RepositorioMemoria implements MateriasRepository {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   }) async {
     final registro = _RegistroMateria(
       id: _nuevoId('mat'),
@@ -83,6 +87,7 @@ class RepositorioMemoria implements MateriasRepository {
       descripcion: descripcion,
       colorIndice: colorIndice,
       iconoClave: iconoClave,
+      semestre: semestre,
     );
     _materias.insert(0, registro);
     return _construir(registro);
@@ -95,12 +100,14 @@ class RepositorioMemoria implements MateriasRepository {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   }) async {
     final registro = _buscar(id);
     registro.nombre = nombre;
     registro.descripcion = descripcion;
     registro.colorIndice = colorIndice;
     registro.iconoClave = iconoClave;
+    registro.semestre = semestre;
   }
 
   @override
@@ -227,6 +234,7 @@ class RepositorioLento extends RepositorioMemoria {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   }) async {
     await compuertaMaterias.future;
     return super.crearMateria(
@@ -234,6 +242,7 @@ class RepositorioLento extends RepositorioMemoria {
       descripcion: descripcion,
       colorIndice: colorIndice,
       iconoClave: iconoClave,
+      semestre: semestre,
     );
   }
 

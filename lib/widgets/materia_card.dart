@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models/materia.dart';
 
 /// Tarjeta visual representativa de una materia en la pantalla de inicio.
@@ -15,11 +16,15 @@ class MateriaCard extends StatelessWidget {
   /// Callback opcional ejecutado al mantener presionada la tarjeta.
   final VoidCallback? onLongPress;
 
+  /// Semestre a mostrar antes del subtítulo; `null` para no mostrarlo.
+  final String? semestre;
+
   const MateriaCard({
     super.key,
     required this.materia,
     required this.onTap,
     this.onLongPress,
+    this.semestre,
   });
 
   @override
@@ -76,8 +81,9 @@ class MateriaCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: materia.colorInicio
-                                  .withValues(alpha: esOscuro ? 0.4 : 0.35),
+                              color: materia.colorInicio.withValues(
+                                alpha: esOscuro ? 0.4 : 0.35,
+                              ),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -107,7 +113,9 @@ class MateriaCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            materia.subtitulo,
+                            semestre == null
+                                ? materia.subtitulo
+                                : '$semestre · ${materia.subtitulo}',
                             style: tema.textTheme.bodySmall?.copyWith(
                               color: esOscuro
                                   ? Colors.white70

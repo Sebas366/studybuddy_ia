@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/catalogo_materia.dart';
 import '../data/materias_repository.dart';
 import '../models/materia.dart';
+import '../utils/semestres.dart';
 import '../utils/validadores.dart';
 
 /// Estado de las materias y apuntes reales del usuario.
@@ -53,6 +54,15 @@ class MateriasProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Semestres distintos de las materias, empezando por el de la materia más reciente.
+  List<String> get semestres {
+    final vistos = <String>[];
+    for (final materia in _materias) {
+      if (!vistos.contains(materia.semestre)) vistos.add(materia.semestre);
+    }
+    return vistos;
+  }
+
   /// Devuelve la materia con ese [id] o `null` si no existe.
   Materia? porId(String id) {
     for (final materia in _materias) {
@@ -72,13 +82,17 @@ class MateriasProvider extends ChangeNotifier {
     String descripcion = '',
     int colorIndice = 0,
     String iconoClave = CatalogoMateria.iconoPorDefecto,
+    String? semestre,
   }) async {
     _exigirValido(validarNombreMateria(nombre));
+    final semestreFinal = semestre ?? semestreActual(DateTime.now());
+    _exigirValido(validarSemestre(semestreFinal));
     await _repositorio.crearMateria(
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
       colorIndice: colorIndice,
       iconoClave: iconoClave,
+      semestre: semestreFinal.trim(),
     );
     await cargar();
   }
@@ -90,14 +104,20 @@ class MateriasProvider extends ChangeNotifier {
     String descripcion = '',
     int colorIndice = 0,
     String iconoClave = CatalogoMateria.iconoPorDefecto,
+    String? semestre,
   }) async {
     _exigirValido(validarNombreMateria(nombre));
+    // Sin semestre indicado se conserva el que ya tenía la materia.
+    final semestreFinal =
+        semestre ?? porId(id)?.semestre ?? semestreActual(DateTime.now());
+    _exigirValido(validarSemestre(semestreFinal));
     await _repositorio.actualizarMateria(
       id: id,
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
       colorIndice: colorIndice,
       iconoClave: iconoClave,
+      semestre: semestreFinal.trim(),
     );
     await cargar();
   }

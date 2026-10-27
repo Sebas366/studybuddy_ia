@@ -30,16 +30,57 @@ class _InicioScreenState extends State<InicioScreen> {
   /// Texto actual aplicado en el filtro.
   String _filtroBusqueda = '';
 
+  /// Semestre elegido en el selector; `null` mientras se use el más reciente.
+  String? _semestreElegido;
+
+  /// `true` cuando el usuario eligió ver todos los semestres.
+  bool _verTodos = false;
+
   @override
   void dispose() {
     _controladorBusqueda.dispose();
     super.dispose();
   }
 
-  /// Filtra las materias por nombre, descripción o título de sus apuntes.
-  List<Materia> _filtrar(List<Materia> materias) {
+  /// Semestre que se está viendo; `null` significa todos.
+  ///
+  /// Por defecto es el de la materia más reciente. Si el semestre elegido ya no
+  /// existe (se borró o movió su última materia), vuelve a ese semestre.
+  String? _semestreActivo(List<String> semestres) {
+    if (_verTodos) return null;
+    final elegido = _semestreElegido;
+    if (elegido != null && semestres.contains(elegido)) return elegido;
+    return semestres.isEmpty ? null : semestres.first;
+  }
+
+  /// Abre el formulario de materia y, si se guardó, hace que la vista siga a esa materia.
+  Future<void> _abrirFormulario({Materia? materia}) async {
+    final provider = context.read<MateriasProvider>();
+    final semestreInicial = materia == null
+        ? _semestreActivo(provider.semestres)
+        : null;
+    final guardado = await mostrarFormularioMateria(
+      context,
+      materia: materia,
+      semestreInicial: semestreInicial,
+    );
+    if (!mounted || guardado == null) return;
+    // Con "Todos" ya se ve todo; en un semestre concreto se salta al de la materia.
+    if (!_verTodos) {
+      setState(() => _semestreElegido = guardado);
+    }
+  }
+
+  /// Filtra las materias por el semestre activo, o por texto si hay búsqueda.
+  ///
+  /// Al buscar se ignora el semestre: se busca por nombre, descripción o título
+  /// de apuntes en todas las materias.
+  List<Materia> _filtrar(List<Materia> materias, String? semestreActivo) {
     if (_filtroBusqueda.trim().isEmpty) {
-      return materias;
+      if (semestreActivo == null) return materias;
+      return materias
+          .where((materia) => materia.semestre == semestreActivo)
+          .toList();
     }
     final busqueda = _filtroBusqueda.trim().toLowerCase();
     return materias.where((materia) {
@@ -79,7 +120,7 @@ class _InicioScreenState extends State<InicioScreen> {
 
     switch (accion) {
       case _AccionMateria.editar:
-        await mostrarFormularioMateria(context, materia: materia);
+        await _abrirFormulario(materia: materia);
       case _AccionMateria.borrar:
         final provider = context.read<MateriasProvider>();
         final confirmado = await confirmarBorrado(
@@ -104,7 +145,12 @@ class _InicioScreenState extends State<InicioScreen> {
       DateTime.now(),
     );
     final todas = provider.materias;
-    final materias = _filtrar(todas);
+    final semestres = provider.semestres;
+    final semestreActivo = _semestreActivo(semestres);
+    final materias = _filtrar(todas, semestreActivo);
+    // Se muestra el semestre en cada tarjeta cuando la lista mezcla semestres.
+    final mostrarSemestre =
+        semestreActivo == null || _filtroBusqueda.trim().isNotEmpty;
 
     return Scaffold(
       body: SafeArea(
@@ -217,9 +263,7 @@ class _InicioScreenState extends State<InicioScreen> {
                       onReintentar: provider.cargar,
                     )
                   else if (todas.isEmpty)
-                    _EstadoVacio(
-                      onCrear: () => mostrarFormularioMateria(context),
-                    )
+                    _EstadoVacio(onCrear: _abrirFormulario)
                   else ...[
                     // --- BUSCADOR EN VIVO ---
                     TextField(
@@ -246,6 +290,21 @@ class _InicioScreenState extends State<InicioScreen> {
                       ),
                     ),
 
+                    const SizedBox(height: 14),
+
+                    // --- SELECTOR DE SEMESTRE ---
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _SelectorSemestre(
+                        semestres: semestres,
+                        activo: semestreActivo,
+                        onElegir: (semestre) => setState(() {
+                          _verTodos = semestre == null;
+                          _semestreElegido = semestre;
+                        }),
+                      ),
+                    ),
+
                     const SizedBox(height: 24),
 
                     // --- ENCABEZADO DE SECCIÓN Y BOTÓN NUEVA MATERIA ---
@@ -263,7 +322,7 @@ class _InicioScreenState extends State<InicioScreen> {
                           ),
                         ),
                         TextButton.icon(
-                          onPressed: () => mostrarFormularioMateria(context),
+                          onPressed: _abrirFormulario,
                           icon: const Icon(Icons.add_rounded, size: 20),
                           label: const Text(
                             'Nueva materia',
@@ -302,6 +361,7 @@ class _InicioScreenState extends State<InicioScreen> {
                       for (final materia in materias)
                         MateriaCard(
                           materia: materia,
+                          semestre: mostrarSemestre ? materia.semestre : null,
                           onLongPress: () => _mostrarOpciones(materia),
                           onTap: () {
                             Navigator.push(
@@ -316,6 +376,81 @@ class _InicioScreenState extends State<InicioScreen> {
                   ],
                 ]),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Botón en forma de píldora que abre el menú para elegir qué semestre ver.
+class _SelectorSemestre extends StatelessWidget {
+  /// Semestres disponibles, el de la materia más reciente primero.
+  final List<String> semestres;
+
+  /// Semestre que se está viendo; `null` significa "Todos".
+  final String? activo;
+
+  /// Se llama con el semestre elegido, o `null` si se eligió "Todos".
+  final ValueChanged<String?> onElegir;
+
+  const _SelectorSemestre({
+    required this.semestres,
+    required this.activo,
+    required this.onElegir,
+  });
+
+  /// Valor interno de la opción "Todos" (el menú no admite `null` como valor).
+  static const _valorTodos = '\u0000todos';
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    final esOscuro = tema.brightness == Brightness.dark;
+
+    return PopupMenuButton<String>(
+      key: const Key('selector-semestre'),
+      tooltip: 'Elegir semestre',
+      onSelected: (valor) => onElegir(valor == _valorTodos ? null : valor),
+      itemBuilder: (contextMenu) => [
+        for (final semestre in semestres)
+          PopupMenuItem<String>(
+            key: Key('semestre-$semestre'),
+            value: semestre,
+            child: Text(semestre),
+          ),
+        const PopupMenuItem<String>(
+          key: Key('semestre-todos'),
+          value: _valorTodos,
+          child: Text('Todos'),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.primario.withValues(alpha: esOscuro ? 0.25 : 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.school_rounded,
+              size: 18,
+              color: AppColors.primario,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              activo ?? 'Todos',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primario,
+              ),
+            ),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              color: AppColors.primario,
             ),
           ],
         ),

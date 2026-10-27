@@ -98,6 +98,7 @@ void main() {
         descripcion: '',
         colorIndice: 0,
         iconoClave: 'libro',
+        semestre: '2026-2',
       );
       // Se agrega un dato directamente en el repositorio, sin pasar por el provider.
       await repositorio.registrarSesionEnfoque(

@@ -31,7 +31,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
     final rutaFinal = ruta ?? p.join(await getDatabasesPath(), 'studybuddy.db');
     final db = await openDatabase(
       rutaFinal,
-      version: 2,
+      version: 3,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, version) async {
         await db.execute('''
@@ -41,6 +41,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
             descripcion TEXT NOT NULL,
             color_indice INTEGER NOT NULL,
             icono_clave TEXT NOT NULL,
+            semestre TEXT NOT NULL,
             creada INTEGER NOT NULL
           )
         ''');
@@ -58,6 +59,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
       },
       onUpgrade: (db, versionAnterior, versionNueva) async {
         if (versionAnterior < 2) await _crearTablasVersion2(db);
+        if (versionAnterior < 3) await _agregarSemestreVersion3(db);
       },
     );
     return MateriasRepositorySqflite._(db);
@@ -84,6 +86,22 @@ class MateriasRepositorySqflite implements MateriasRepository {
         total INTEGER NOT NULL,
         fecha INTEGER NOT NULL
       )
+    ''');
+  }
+
+  /// Agrega la columna `semestre` (versión 3 del esquema).
+  ///
+  /// Las materias que ya existían reciben el semestre que corresponde a su fecha
+  /// de creación: de enero a junio `AAAA-1` y de julio a diciembre `AAAA-2`.
+  static Future<void> _agregarSemestreVersion3(Database db) async {
+    await db.execute(
+      "ALTER TABLE materias ADD COLUMN semestre TEXT NOT NULL DEFAULT ''",
+    );
+    await db.execute('''
+      UPDATE materias SET semestre =
+        strftime('%Y', creada / 1000, 'unixepoch', 'localtime') || '-' ||
+        CASE WHEN CAST(strftime('%m', creada / 1000, 'unixepoch', 'localtime') AS INTEGER) <= 6
+             THEN '1' ELSE '2' END
     ''');
   }
 
@@ -131,6 +149,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
       respuestasSimuladasIa: const [],
       colorIndice: colorIndice,
       iconoClave: iconoClave,
+      semestre: fila['semestre'] as String,
     );
   }
 
@@ -163,6 +182,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   }) async {
     final fila = <String, Object?>{
       'id': _nuevoId('mat'),
@@ -170,6 +190,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
       'descripcion': descripcion,
       'color_indice': colorIndice,
       'icono_clave': iconoClave,
+      'semestre': semestre,
       'creada': DateTime.now().millisecondsSinceEpoch,
     };
     await _db.insert('materias', fila);
@@ -183,6 +204,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
     required String descripcion,
     required int colorIndice,
     required String iconoClave,
+    required String semestre,
   }) async {
     await _db.update(
       'materias',
@@ -191,6 +213,7 @@ class MateriasRepositorySqflite implements MateriasRepository {
         'descripcion': descripcion,
         'color_indice': colorIndice,
         'icono_clave': iconoClave,
+        'semestre': semestre,
       },
       where: 'id = ?',
       whereArgs: [id],
