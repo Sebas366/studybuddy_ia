@@ -3,34 +3,38 @@ import 'package:provider/provider.dart';
 import '../models/apunte.dart';
 import '../models/materia.dart';
 import '../models/modo_pomodoro.dart';
+import '../providers/estadisticas_provider.dart';
+import '../providers/ia_provider.dart';
 import '../providers/materias_provider.dart';
 import '../providers/pomodoro_provider.dart';
+import '../services/selector_imagen.dart';
+import '../services/servicio_ia.dart';
 import '../utils/calculos_estadisticas.dart';
 import '../widgets/accion_card.dart';
-import '../widgets/aviso_ia_fase3.dart';
+import '../widgets/dialogo_clave_ia.dart';
 import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/formulario_materia.dart';
 import 'apunte_screen.dart';
-import 'formulario_apunte_screen.dart';
-import 'resumen_ia_screen.dart';
-import 'quiz_screen.dart';
 import 'chat_tutor_screen.dart';
+import 'formulario_apunte_screen.dart';
 import 'pomodoro_screen.dart';
+import 'preparar_quiz_screen.dart';
+import 'resumen_ia_screen.dart';
 
-/// Acciones del menú de la cabecera de una materia real.
+/// Acciones del menú de la cabecera de una materia.
 enum _AccionMateria { editar, borrar }
 
-/// Acciones al mantener pulsado un apunte real.
+/// Acciones al mantener pulsado un apunte.
 enum _AccionApunte { editar, borrar }
 
 /// Pantalla detallada de una materia seleccionada.
 ///
 /// Dispone de cabecera con degradado distintivo, Hero en el icono,
-/// cuadrícula 2x2 para herramientas de IA (Resumir, Quiz IA, Tutor IA, Pomodoro),
-/// listado interactivo de apuntes y botón flotante de escaneo con IA.
+/// cuadrícula 2x2 de herramientas (Resumir, Quiz IA, Tutor IA, Pomodoro),
+/// listado de apuntes y botón flotante para escanear un apunte con la cámara.
 ///
-/// Las materias de demostración (`esDemo`) se muestran tal cual. Las reales se
-/// leen en vivo del [MateriasProvider] y permiten editar, borrar y gestionar apuntes.
+/// La materia se lee en vivo del [MateriasProvider], así que la pantalla se
+/// actualiza sola al editarla y se cierra si se borra.
 class DetalleMateriaScreen extends StatefulWidget {
   /// Materia seleccionada cuyos datos se presentarán.
   final Materia materia;
@@ -48,7 +52,179 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
   /// Evita cerrar la pantalla más de una vez cuando la materia deja de existir.
   bool _cerrando = false;
 
-  /// Atiende el menú de la cabecera: editar o borrar la materia real.
+  /// Evita lanzar dos escaneos a la vez.
+  bool _escaneando = false;
+
+  void _avisar(String mensaje) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  /// Abre el resumen de un apunte; si la materia tiene varios, deja elegir cuál.
+  Future<void> _resumir(Materia materia) async {
+    if (materia.apuntes.isEmpty) {
+      _avisar('Agrega un apunte para poder resumirlo.');
+      return;
+    }
+    var apunte = materia.apuntes.first;
+    if (materia.apuntes.length > 1) {
+      final elegido = await showModalBottomSheet<Apunte>(
+        context: context,
+        builder: (contextHoja) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(
+                title: Text(
+                  '¿Qué apunte quieres resumir?',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              for (final opcion in materia.apuntes)
+                ListTile(
+                  leading: Icon(
+                    opcion.tieneResumen
+                        ? Icons.auto_awesome_rounded
+                        : Icons.article_rounded,
+                  ),
+                  title: Text(opcion.titulo),
+                  subtitle: Text(
+                    opcion.tieneResumen ? 'Resumen listo' : opcion.fecha,
+                  ),
+                  onTap: () => Navigator.pop(contextHoja, opcion),
+                ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted || elegido == null) return;
+      apunte = elegido;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            ResumenIaScreen(materiaId: materia.id, apunteId: apunte.id),
+      ),
+    );
+  }
+
+  /// Abre el quiz de la materia (lo genera con IA si aún no existe).
+  void _abrirQuiz(Materia materia) {
+    if (materia.apuntes.isEmpty && materia.preguntas.isEmpty) {
+      _avisar('Agrega un apunte para que la IA pueda crear el quiz.');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PrepararQuizScreen(materiaId: materia.id),
+      ),
+    );
+  }
+
+  /// Abre el chat con el tutor, pidiendo antes la clave de IA si falta.
+  Future<void> _abrirTutor(Materia materia) async {
+    if (!await asegurarClaveIa(context)) return;
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatTutorScreen(materiaId: materia.id),
+      ),
+    );
+  }
+
+  /// Toma o elige una foto, la transcribe con IA y abre el apunte para revisarlo.
+  Future<void> _escanear(Materia materia) async {
+    if (_escaneando) return;
+    if (!await asegurarClaveIa(context)) return;
+    if (!mounted) return;
+
+    final origen = await showModalBottomSheet<OrigenImagen>(
+      context: context,
+      builder: (contextHoja) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('escanear-camara'),
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Tomar una foto'),
+              onTap: () => Navigator.pop(contextHoja, OrigenImagen.camara),
+            ),
+            ListTile(
+              key: const Key('escanear-galeria'),
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Elegir de la galería'),
+              onTap: () => Navigator.pop(contextHoja, OrigenImagen.galeria),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || origen == null) return;
+
+    final selector = context.read<SelectorImagen>();
+    final ia = context.read<IaProvider>();
+    final navegador = Navigator.of(context);
+    _escaneando = true;
+    try {
+      final imagen = await selector.elegir(origen);
+      if (!mounted || imagen == null) return;
+
+      // Diálogo de espera que no se puede cerrar mientras la IA lee la foto.
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Expanded(child: Text('Leyendo tu apunte con IA...')),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      String? error;
+      try {
+        final escaneado = await ia.servicio.transcribirImagen(
+          imagen: imagen.bytes,
+          tipoMime: imagen.tipoMime,
+          materia: materia.nombre,
+        );
+        navegador.pop(); // cierra el diálogo de espera
+        await navegador.push(
+          MaterialPageRoute(
+            builder: (context) => FormularioApunteScreen(
+              materiaId: materia.id,
+              tituloInicial: escaneado.titulo,
+              contenidoInicial: escaneado.contenido,
+            ),
+          ),
+        );
+        return;
+      } on ErrorIa catch (fallo) {
+        error = fallo.mensaje;
+      } catch (_) {
+        error = 'No se pudo leer la foto. Inténtalo de nuevo.';
+      }
+      navegador.pop(); // cierra el diálogo de espera
+      if (mounted) _avisar(error);
+    } catch (_) {
+      if (mounted) _avisar('No se pudo abrir la cámara o la galería.');
+    } finally {
+      _escaneando = false;
+    }
+  }
+
+  /// Atiende el menú de la cabecera: editar o borrar la materia.
   Future<void> _alElegirAccionMateria(
       _AccionMateria accion, Materia materia) async {
     switch (accion) {
@@ -76,7 +252,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
     );
   }
 
-  /// Abre la hoja con las opciones "Editar" y "Borrar" de un apunte real.
+  /// Abre la hoja con las opciones "Editar" y "Borrar" de un apunte.
   Future<void> _mostrarOpcionesApunte(Apunte apunte) async {
     final accion = await showModalBottomSheet<_AccionApunte>(
       context: context,
@@ -132,34 +308,27 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
     // Solo se reconstruye si cambia el modo demostración (no en cada segundo del Pomodoro).
     final modoDemo = context.select<PomodoroProvider, bool>((p) => p.modoDemo);
 
-    // Las materias reales se leen en vivo; si ya no existen, se cierra la pantalla.
-    var materia = widget.materia;
-    if (!materia.esDemo) {
-      final viva = context.watch<MateriasProvider>().porId(materia.id);
-      if (viva == null) {
-        if (!_cerrando) {
-          _cerrando = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) Navigator.of(context).maybePop();
-          });
-        }
-        return const Scaffold();
+    // La materia se lee en vivo; si ya no existe, se cierra la pantalla.
+    final materia = context.watch<MateriasProvider>().porId(widget.materia.id);
+    if (materia == null) {
+      if (!_cerrando) {
+        _cerrando = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.of(context).maybePop();
+        });
       }
-      materia = viva;
+      return const Scaffold();
     }
+    // Mejor resultado en los quizzes de la materia; `null` si no ha hecho ninguno.
+    final dominio = mejorIntento(
+      context.watch<EstadisticasProvider>().intentos,
+      materia.id,
+    )?.proporcion;
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Requisito: Botón flotante "Escanear" que solo muestra un SnackBar
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Función de escaneo de apuntes con IA próximamente...'),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        },
+        key: const Key('escanear-apunte'),
+        onPressed: () => _escanear(materia),
         backgroundColor: materia.colorInicio,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.document_scanner_rounded),
@@ -192,9 +361,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                 onPressed: () => Navigator.pop(context),
               ),
               actions: [
-                // Solo las materias reales se pueden editar o borrar
-                if (!materia.esDemo)
-                  PopupMenuButton<_AccionMateria>(
+                PopupMenuButton<_AccionMateria>(
                     key: const Key('menu-materia'),
                     icon: Container(
                       padding: const EdgeInsets.all(6),
@@ -286,8 +453,8 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                           ),
                         ],
                       ),
-                      // El progreso real llega en la Parte 2; solo las materias demo lo muestran
-                      if (materia.esDemo) ...[
+                      // El dominio sale del mejor quiz; sin quizzes no se muestra
+                      if (dominio != null) ...[
                         const SizedBox(height: 16),
                         // Barra de progreso dentro del banner
                         Row(
@@ -296,7 +463,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: LinearProgressIndicator(
-                                  value: materia.progreso,
+                                  value: dominio,
                                   minHeight: 6,
                                   backgroundColor:
                                       Colors.white.withValues(alpha: 0.25),
@@ -309,7 +476,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              '${(materia.progreso * 100).toInt()}% dominado',
+                              '${(dominio * 100).round()}% dominado',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -341,6 +508,8 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                     ),
                     const SizedBox(height: 14),
                     GridView.count(
+                      // Sin esto la cuadrícula hereda el alto de la barra de estado como margen.
+                      padding: EdgeInsets.zero,
                       crossAxisCount: 2,
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
@@ -354,62 +523,18 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                           subtitulo: 'Ideas clave y síntesis',
                           icono: Icons.auto_awesome_rounded,
                           colorTema: const Color(0xFF6750A4),
-                          onTap: () {
-                            if (!materia.esDemo) {
-                              mostrarAvisoIaFase3(context);
-                              return;
-                            }
-                            if (materia.apuntes.isNotEmpty) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ResumenIaScreen(
-                                    apunte: materia.apuntes.first,
-                                    materia: materia,
-                                  ),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('No hay apuntes disponibles para resumir.'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
-                          },
+                          onTap: () => _resumir(materia),
                         ),
 
                         // Acción 2: Quiz IA
                         AccionCard(
                           titulo: 'Quiz IA',
-                          subtitulo: materia.esDemo
-                              ? '${materia.preguntas.length} preguntas'
-                              : 'Próximamente',
+                          subtitulo: materia.preguntas.isEmpty
+                              ? 'Generar con IA'
+                              : '${materia.preguntas.length} preguntas',
                           icono: Icons.quiz_rounded,
                           colorTema: const Color(0xFFE65100),
-                          onTap: () {
-                            if (!materia.esDemo) {
-                              mostrarAvisoIaFase3(context);
-                              return;
-                            }
-                            if (materia.preguntas.isNotEmpty) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      QuizScreen(materia: materia),
-                                ),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('No hay preguntas configuradas para esta materia.'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
-                          },
+                          onTap: () => _abrirQuiz(materia),
                         ),
 
                         // Acción 3: Tutor IA
@@ -418,19 +543,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                           subtitulo: 'Resuelve tus dudas',
                           icono: Icons.support_agent_rounded,
                           colorTema: const Color(0xFF00897B),
-                          onTap: () {
-                            if (!materia.esDemo) {
-                              mostrarAvisoIaFase3(context);
-                              return;
-                            }
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    ChatTutorScreen(materia: materia),
-                              ),
-                            );
-                          },
+                          onTap: () => _abrirTutor(materia),
                         ),
 
                         // Acción 4: Pomodoro
@@ -472,15 +585,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                           fontSize: 17,
                         ),
                       ),
-                      if (materia.esDemo)
-                        Text(
-                          'Toca para ver el resumen',
-                          style: tema.textTheme.labelSmall?.copyWith(
-                            color: esOscuro ? Colors.white54 : Colors.black45,
-                          ),
-                        )
-                      else
-                        TextButton.icon(
+                      TextButton.icon(
                           key: const Key('nuevo-apunte'),
                           onPressed: () => _crearApunte(materia),
                           icon: const Icon(Icons.add_rounded, size: 20),
@@ -491,7 +596,7 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                         ),
                     ],
                   ),
-                  if (!materia.esDemo && materia.apuntes.isNotEmpty)
+                  if (materia.apuntes.isNotEmpty)
                     Text(
                       'Mantén pulsado un apunte para editar o borrar',
                       style: tema.textTheme.labelSmall?.copyWith(
@@ -510,9 +615,8 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                       ),
                       child: Center(
                         child: Text(
-                          materia.esDemo
-                              ? 'No hay apuntes cargados aún. Usa el botón "Escanear" para agregar.'
-                              : 'Aún no tienes apuntes. Toca "+ Nuevo" para crear el primero.',
+                          'Aún no tienes apuntes. Toca "+ Nuevo" para escribir '
+                          'el primero o "Escanear" para pasar una foto a texto.',
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -570,8 +674,8 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                             subtitle: Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                materia.esDemo
-                                    ? '${apunte.fecha} • ${apunte.ideasClave.length} ideas clave'
+                                apunte.tieneResumen
+                                    ? '${apunte.fecha} • Resumen listo'
                                     : apunte.fecha,
                                 style: tema.textTheme.bodySmall?.copyWith(
                                   color: esOscuro
@@ -585,27 +689,18 @@ class _DetalleMateriaScreenState extends State<DetalleMateriaScreen> {
                               Icons.chevron_right_rounded,
                               size: 20,
                             ),
-                            // Los apuntes de demostración abren el resumen simulado;
-                            // los reales, su texto con el aviso de IA.
                             onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => materia.esDemo
-                                      ? ResumenIaScreen(
-                                          apunte: apunte,
-                                          materia: materia,
-                                        )
-                                      : ApunteScreen(
-                                          apunte: apunte,
-                                          materia: materia,
-                                        ),
+                                  builder: (context) => ApunteScreen(
+                                    materiaId: materia.id,
+                                    apunteId: apunte.id,
+                                  ),
                                 ),
                               );
                             },
-                            onLongPress: materia.esDemo
-                                ? null
-                                : () => _mostrarOpcionesApunte(apunte),
+                            onLongPress: () => _mostrarOpcionesApunte(apunte),
                           ),
                         ),
                       ),

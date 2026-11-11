@@ -5,7 +5,8 @@ import '../models/materia.dart';
 /// Tarjeta visual representativa de una materia en la pantalla de inicio.
 ///
 /// Implementa una animación [Hero] en el contenedor del icono de la asignatura,
-/// un degradado sutil con los colores de la materia y una barra de progreso porcentual.
+/// un degradado con los colores de la materia y, si ya se presentó algún quiz,
+/// una barra con el mejor resultado.
 class MateriaCard extends StatelessWidget {
   /// Instancia de la materia que contiene la información a renderizar.
   final Materia materia;
@@ -19,19 +20,23 @@ class MateriaCard extends StatelessWidget {
   /// Semestre a mostrar antes del subtítulo; `null` para no mostrarlo.
   final String? semestre;
 
+  /// Mejor resultado en los quizzes de la materia (0.0 a 1.0); `null` si no hay ninguno.
+  final double? dominio;
+
   const MateriaCard({
     super.key,
     required this.materia,
     required this.onTap,
     this.onLongPress,
     this.semestre,
+    this.dominio,
   });
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
-    final porcentajeTexto = '${(materia.progreso * 100).toInt()}%';
+    final dominio = this.dominio;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -139,8 +144,8 @@ class MateriaCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                // El progreso real llega en la Parte 2; solo las materias demo lo muestran
-                if (materia.esDemo) ...[
+                // El dominio sale del mejor quiz; sin quizzes no se muestra la barra
+                if (dominio != null) ...[
                   const SizedBox(height: 18),
                   // Barra de progreso y porcentaje numérico
                   Column(
@@ -150,7 +155,7 @@ class MateriaCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Progreso general',
+                            'Mejor resultado en quiz',
                             style: tema.textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.w500,
                               color: esOscuro
@@ -159,7 +164,7 @@ class MateriaCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            porcentajeTexto,
+                            '${(dominio * 100).round()}%',
                             style: tema.textTheme.labelSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: materia.colorInicio,
@@ -171,7 +176,7 @@ class MateriaCard extends StatelessWidget {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
-                          value: materia.progreso,
+                          value: dominio,
                           minHeight: 7,
                           backgroundColor: esOscuro
                               ? Colors.white.withValues(alpha: 0.1)

@@ -2,11 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
-/// Notificador global reactivo para controlar el modo del tema (claro, oscuro o del sistema).
-/// Por defecto se inicializa en [ThemeMode.system], permitiendo cambiarlo desde Perfil.
-final ValueNotifier<ThemeMode> modoTemaGlobal =
-    ValueNotifier<ThemeMode>(ThemeMode.system);
-
 /// Configuración de temas visuales para StudyBuddy IA según la especificación Material 3.
 /// Incluye tipografía Poppins y soporte completo para modo claro y modo oscuro.
 class AppTheme {

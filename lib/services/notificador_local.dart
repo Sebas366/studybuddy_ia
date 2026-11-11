@@ -7,9 +7,10 @@ import 'notificador_pomodoro.dart';
 
 /// Implementación real: una notificación programada con una alarma del sistema.
 ///
-/// El aviso suena con el sonido de alarma y **repite la vibración** hasta que se
-/// abre la app, se descarta o pasan 60 segundos (bandera `FLAG_INSISTENT`).
-class NotificadorLocal implements NotificadorPomodoro {
+/// El aviso del Pomodoro suena con el sonido de alarma y **repite la vibración**
+/// hasta que se abre la app, se descarta o pasan 60 segundos (bandera
+/// `FLAG_INSISTENT`). El recordatorio diario es una notificación normal.
+class NotificadorLocal implements NotificadorPomodoro, NotificadorRecordatorio {
   NotificadorLocal._(this._plugin);
 
   final FlutterLocalNotificationsPlugin _plugin;
@@ -20,6 +21,11 @@ class NotificadorLocal implements NotificadorPomodoro {
   /// Identificador y nombre del canal de notificaciones de Android.
   static const String _idCanal = 'pomodoro_fin';
   static const String _nombreCanal = 'Fin de bloque Pomodoro';
+
+  /// Identificador y canal del recordatorio diario de estudio.
+  static const int _idRecordatorio = 2;
+  static const String _idCanalRecordatorio = 'recordatorio_estudio';
+  static const String _nombreCanalRecordatorio = 'Recordatorio de estudio';
 
   /// Inicializa el plugin. Lanza si el sistema no lo permite.
   static Future<NotificadorLocal> crear() async {
@@ -113,6 +119,51 @@ class NotificadorLocal implements NotificadorPomodoro {
   Future<void> cancelar() async {
     try {
       await _plugin.cancel(id: _idNotificacion);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> programarDiario({
+    required int hora,
+    required int minuto,
+    required String titulo,
+    required String cuerpo,
+  }) async {
+    // Próxima vez que el reloj local marque esa hora: hoy, o mañana si ya pasó.
+    final ahora = DateTime.now();
+    var proxima = DateTime(ahora.year, ahora.month, ahora.day, hora, minuto);
+    if (!proxima.isAfter(ahora)) {
+      proxima = DateTime(ahora.year, ahora.month, ahora.day + 1, hora, minuto);
+    }
+    try {
+      // Se repite a la misma hora UTC cada día, que equivale a la misma hora
+      // local mientras la zona no cambie de horario (Colombia no lo hace).
+      await _plugin.zonedSchedule(
+        id: _idRecordatorio,
+        scheduledDate: tz.TZDateTime.from(proxima, tz.UTC),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _idCanalRecordatorio,
+            _nombreCanalRecordatorio,
+            channelDescription: 'Aviso diario para mantener la racha de estudio',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+        title: titulo,
+        body: cuerpo,
+      );
+    } catch (_) {
+      // Sin recordatorio la app sigue funcionando.
+    }
+  }
+
+  @override
+  Future<void> cancelarDiario() async {
+    try {
+      await _plugin.cancel(id: _idRecordatorio);
     } catch (_) {}
   }
 }

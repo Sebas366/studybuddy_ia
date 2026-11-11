@@ -1,64 +1,97 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../data/datos_demo.dart';
-import '../models/materia.dart';
+import 'package:provider/provider.dart';
+
+import '../data/materias_repository.dart';
 import '../models/mensaje_chat.dart';
+import '../providers/ajustes_provider.dart';
+import '../providers/ia_provider.dart';
+import '../providers/materias_provider.dart';
+import '../services/servicio_ia.dart';
 import '../theme/app_colors.dart';
 import '../widgets/burbuja_chat.dart';
+import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/indicador_escribiendo.dart';
 
-/// Pantalla de chat conversacional con el Tutor IA pedagógico.
+/// Pantalla de chat con el Tutor IA de una materia.
 ///
-/// Implementa burbujas de mensaje, avatar de la IA, indicador reactivo de pensamiento,
-/// chips interactivos con preguntas sugeridas y simulación de respuesta con 1.3 s de retardo.
+/// El tutor responde con la API de IA usando los apuntes de la materia como
+/// contexto, y el texto aparece mientras se escribe (streaming). La
+/// conversación se guarda en el dispositivo, así que sigue ahí al volver.
 class ChatTutorScreen extends StatefulWidget {
   /// Materia sobre la cual el Tutor IA orientará las respuestas.
-  final Materia materia;
+  final String materiaId;
 
-  const ChatTutorScreen({
-    super.key,
-    required this.materia,
-  });
+  const ChatTutorScreen({super.key, required this.materiaId});
 
   @override
   State<ChatTutorScreen> createState() => _ChatTutorScreenState();
 }
 
 class _ChatTutorScreenState extends State<ChatTutorScreen> {
+  /// Preguntas rápidas que se ofrecen como chips sobre el campo de texto.
+  static const List<String> _sugerencias = [
+    '¿Me explicas el concepto principal?',
+    'Dame un ejemplo práctico y cotidiano',
+    '¿Cómo suelen evaluar esto en un parcial?',
+    'Hazme una pregunta rápida de prueba',
+  ];
+
   /// Controlador para el campo de texto del chat.
   final TextEditingController _controladorTexto = TextEditingController();
 
-  /// Controlador de desplazamiento para anclar automáticamente la vista al último mensaje.
+  /// Controlador de desplazamiento para anclar la vista al último mensaje.
   final ScrollController _controladorScroll = ScrollController();
 
-  /// Historial dinámico de mensajes en la sesión actual.
-  final List<MensajeChat> _mensajes = [];
+  /// Conversación guardada, del mensaje más viejo al más nuevo.
+  List<MensajeChat> _mensajes = [];
 
-  /// Bandera que indica si la IA está generando su respuesta.
+  /// `true` hasta que se lee la conversación guardada.
+  bool _cargando = true;
+
+  /// `true` desde que se envía una pregunta hasta que el tutor termina de responder.
   bool _estaEscribiendo = false;
 
-  /// Índice rotativo para ciclar entre las respuestas simuladas de la materia.
-  int _indiceRespuestaIa = 0;
+  /// Lo que el tutor lleva escrito de la respuesta en curso.
+  String _respuestaParcial = '';
+
+  /// Mensaje del error de la última respuesta; `null` si no hubo.
+  String? _error;
+
+  /// Suscripción a la respuesta en curso, para cancelarla al salir.
+  StreamSubscription<String>? _suscripcion;
+
+  late final MateriasRepository _repositorio;
 
   @override
   void initState() {
     super.initState();
-    // Mensaje de bienvenida inicial generado por la IA personalizado según la materia
-    _mensajes.add(
-      MensajeChat(
-        id: 'msg_inicio',
-        texto:
-            '¡Hola, Edwin! Soy tu Tutor IA para ${widget.materia.nombre}. ¿Qué concepto o duda te gustaría que aclaremos hoy?',
-        esUsuario: false,
-        fecha: DateTime.now().subtract(const Duration(minutes: 1)),
-      ),
-    );
+    _repositorio = context.read<MateriasRepository>();
+    _cargarConversacion();
   }
 
   @override
   void dispose() {
+    _suscripcion?.cancel();
     _controladorTexto.dispose();
     _controladorScroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _cargarConversacion() async {
+    List<MensajeChat> mensajes = const [];
+    try {
+      mensajes = await _repositorio.obtenerMensajesChat(widget.materiaId);
+    } catch (_) {
+      // Sin historial se empieza una conversación nueva.
+    }
+    if (!mounted) return;
+    setState(() {
+      _mensajes = [...mensajes];
+      _cargando = false;
+    });
+    _desplazarAlFinal();
   }
 
   /// Desplaza suavemente la lista hacia el último mensaje enviado o recibido.
@@ -74,57 +107,136 @@ class _ChatTutorScreenState extends State<ChatTutorScreen> {
     });
   }
 
-  /// Procesa el envío de un mensaje de usuario y activa la simulación de respuesta de la IA.
+  /// Guarda la pregunta del estudiante y pide la respuesta del tutor.
   Future<void> _enviarMensaje([String? textoOpcional]) async {
-    final texto = textoOpcional ?? _controladorTexto.text.trim();
-    if (texto.isEmpty || _estaEscribiendo) return;
+    final texto = (textoOpcional ?? _controladorTexto.text).trim();
+    if (texto.isEmpty || _estaEscribiendo || _cargando) return;
+    if (textoOpcional == null) _controladorTexto.clear();
 
-    if (textoOpcional == null) {
-      _controladorTexto.clear();
+    MensajeChat mensaje;
+    try {
+      mensaje = await _repositorio.agregarMensajeChat(
+        materiaId: widget.materiaId,
+        texto: texto,
+        esUsuario: true,
+      );
+    } catch (_) {
+      // Si no se pudo guardar, la conversación sigue solo en pantalla.
+      mensaje = MensajeChat(
+        id: 'usr_${DateTime.now().microsecondsSinceEpoch}',
+        texto: texto,
+        esUsuario: true,
+        fecha: DateTime.now(),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _mensajes.add(mensaje));
+    _pedirRespuesta();
+  }
+
+  /// Pide al tutor que responda a la conversación actual.
+  ///
+  /// También sirve para reintentar: no agrega ninguna pregunta nueva.
+  void _pedirRespuesta() {
+    final materia = context.read<MateriasProvider>().porId(widget.materiaId);
+    if (materia == null || _estaEscribiendo) return;
+
+    final Stream<String> respuesta;
+    try {
+      respuesta = context.read<IaProvider>().servicio.responderTutor(
+        materia: materia.nombre,
+        nombreEstudiante: context.read<AjustesProvider>().nombre,
+        apuntes: materia.apuntes,
+        historial: List.of(_mensajes),
+      );
+    } on ErrorIa catch (fallo) {
+      setState(() => _error = fallo.mensaje);
+      return;
     }
 
-    // 1. Agregar el mensaje del estudiante
-    final nuevoMensajeUsuario = MensajeChat(
-      id: 'usr_${DateTime.now().millisecondsSinceEpoch}',
-      texto: texto,
-      esUsuario: true,
-      fecha: DateTime.now(),
-    );
-
     setState(() {
-      _mensajes.add(nuevoMensajeUsuario);
       _estaEscribiendo = true;
+      _respuestaParcial = '';
+      _error = null;
     });
-
     _desplazarAlFinal();
 
-    // 2. Simulación de latencia de red y razonamiento de IA: exactamente 1.3 s (1300 ms)
-    await Future.delayed(const Duration(milliseconds: 1300));
-
-    if (!mounted) return;
-
-    // 3. Obtener respuesta pedagógica simulada del banco de la materia
-    final respuestas = widget.materia.respuestasSimuladasIa;
-    final respuestaTexto = respuestas.isNotEmpty
-        ? respuestas[_indiceRespuestaIa % respuestas.length]
-        : 'He procesado tu consulta sobre ${widget.materia.nombre}. Repasa los conceptos clave en tus apuntes para consolidar este tema.';
-
-    _indiceRespuestaIa++;
-
-    final nuevoMensajeIa = MensajeChat(
-      id: 'ia_${DateTime.now().millisecondsSinceEpoch}',
-      texto: respuestaTexto,
-      esUsuario: false,
-      fecha: DateTime.now(),
+    _suscripcion = respuesta.listen(
+      (parte) {
+        setState(() => _respuestaParcial += parte);
+        _desplazarAlFinal();
+      },
+      onError: (Object fallo) {
+        // Lo que alcanzó a llegar se descarta: una respuesta a medias confunde.
+        setState(() {
+          _estaEscribiendo = false;
+          _respuestaParcial = '';
+          _error = fallo is ErrorIa
+              ? fallo.mensaje
+              : 'El tutor no pudo responder. Inténtalo de nuevo.';
+        });
+      },
+      onDone: _alTerminarRespuesta,
+      cancelOnError: true,
     );
+  }
 
-    // 4. Actualizar estado y quitar indicador de escritura
+  /// Guarda la respuesta completa del tutor en la conversación.
+  Future<void> _alTerminarRespuesta() async {
+    final texto = _respuestaParcial.trim();
+    if (texto.isEmpty) {
+      setState(() {
+        _estaEscribiendo = false;
+        _error = 'El tutor no respondió. Inténtalo de nuevo.';
+      });
+      return;
+    }
+
+    MensajeChat mensaje;
+    try {
+      mensaje = await _repositorio.agregarMensajeChat(
+        materiaId: widget.materiaId,
+        texto: texto,
+        esUsuario: false,
+      );
+    } catch (_) {
+      mensaje = MensajeChat(
+        id: 'ia_${DateTime.now().microsecondsSinceEpoch}',
+        texto: texto,
+        esUsuario: false,
+        fecha: DateTime.now(),
+      );
+    }
+    if (!mounted) return;
     setState(() {
-      _mensajes.add(nuevoMensajeIa);
+      _mensajes.add(mensaje);
+      _respuestaParcial = '';
       _estaEscribiendo = false;
     });
-
     _desplazarAlFinal();
+  }
+
+  /// Borra la conversación guardada, previa confirmación.
+  Future<void> _nuevaConversacion() async {
+    final confirmado = await confirmarBorrado(
+      context,
+      titulo: 'Nueva conversación',
+      mensaje: 'Se borrarán los mensajes de este chat con el tutor.',
+    );
+    if (!confirmado) return;
+    // Sin esperar: cancelar una respuesta que ya terminó puede no avisar nunca.
+    unawaited(_suscripcion?.cancel());
+    _suscripcion = null;
+    try {
+      await _repositorio.borrarMensajesChat(widget.materiaId);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _mensajes = [];
+      _respuestaParcial = '';
+      _estaEscribiendo = false;
+      _error = null;
+    });
   }
 
   @override
@@ -132,12 +244,46 @@ class _ChatTutorScreenState extends State<ChatTutorScreen> {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
 
+    final materia = context.watch<MateriasProvider>().porId(widget.materiaId);
+    if (materia == null) {
+      // La materia se borró mientras el chat estaba abierto.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).maybePop();
+      });
+      return const Scaffold();
+    }
+    final nombre = context.select<AjustesProvider, String>((a) => a.nombre);
+
+    // El saludo se muestra siempre arriba pero no se guarda ni se envía a la IA.
+    final saludo = MensajeChat(
+      id: 'saludo',
+      texto:
+          '¡Hola, $nombre! Soy tu Tutor IA para ${materia.nombre}. '
+          '${materia.apuntes.isEmpty ? 'Todavía no tienes apuntes aquí, pero puedo ayudarte con la materia.' : 'Ya leí tus apuntes.'} '
+          '¿Qué duda quieres que aclaremos hoy?',
+      esUsuario: false,
+      fecha: _mensajes.isEmpty ? DateTime.now() : _mensajes.first.fecha,
+    );
+    final burbujas = [
+      saludo,
+      ..._mensajes,
+      if (_respuestaParcial.isNotEmpty)
+        MensajeChat(
+          id: 'respuesta-en-curso',
+          texto: _respuestaParcial,
+          esUsuario: false,
+          fecha: DateTime.now(),
+        ),
+    ];
+    // Los tres puntos solo se ven mientras el tutor piensa, antes del primer texto.
+    final pensando = _estaEscribiendo && _respuestaParcial.isEmpty;
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
           children: [
             Text(
-              'Tutor IA: ${widget.materia.nombre}',
+              'Tutor IA: ${materia.nombre}',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               overflow: TextOverflow.ellipsis,
             ),
@@ -147,14 +293,18 @@ class _ChatTutorScreenState extends State<ChatTutorScreen> {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF4CAF50),
+                  decoration: BoxDecoration(
+                    color: _error == null
+                        ? const Color(0xFF4CAF50)
+                        : tema.colorScheme.error,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _estaEscribiendo ? 'Pensando...' : 'En línea 24/7',
+                  _estaEscribiendo
+                      ? (pensando ? 'Pensando...' : 'Escribiendo...')
+                      : 'Responde con tus apuntes',
                   style: tema.textTheme.labelSmall?.copyWith(
                     color: esOscuro ? Colors.white60 : Colors.black54,
                     fontSize: 11,
@@ -164,6 +314,15 @@ class _ChatTutorScreenState extends State<ChatTutorScreen> {
             ),
           ],
         ),
+        actions: [
+          if (_mensajes.isNotEmpty)
+            IconButton(
+              key: const Key('nueva-conversacion'),
+              tooltip: 'Nueva conversación',
+              icon: const Icon(Icons.delete_sweep_rounded),
+              onPressed: _nuevaConversacion,
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -174,16 +333,47 @@ class _ChatTutorScreenState extends State<ChatTutorScreen> {
                 controller: _controladorScroll,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: _mensajes.length + (_estaEscribiendo ? 1 : 0),
+                itemCount: burbujas.length + (pensando ? 1 : 0),
                 itemBuilder: (context, index) {
                   // Si llegamos al final y la IA está pensando, mostramos el indicador animado
-                  if (index == _mensajes.length && _estaEscribiendo) {
+                  if (index == burbujas.length) {
                     return const IndicadorEscribiendo();
                   }
-                  return BurbujaChat(mensaje: _mensajes[index]);
+                  return BurbujaChat(mensaje: burbujas[index]);
                 },
               ),
             ),
+
+            // --- AVISO DE ERROR CON BOTÓN PARA REINTENTAR ---
+            if (_error != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                decoration: BoxDecoration(
+                  color: tema.colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: tema.colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                    // Solo se puede reintentar si quedó una pregunta sin responder.
+                    if (_mensajes.isNotEmpty && _mensajes.last.esUsuario)
+                      TextButton(
+                        key: const Key('reintentar-tutor'),
+                        onPressed: _pedirRespuesta,
+                        child: const Text('Reintentar'),
+                      ),
+                  ],
+                ),
+              ),
 
             // --- CHIPS CON SUGERENCIAS RÁPIDAS DE PREGUNTA ---
             Container(
@@ -192,10 +382,10 @@ class _ChatTutorScreenState extends State<ChatTutorScreen> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: DatosDemo.sugerenciasChat.length,
+                itemCount: _sugerencias.length,
                 separatorBuilder: (context, index) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
-                  final sugerencia = DatosDemo.sugerenciasChat[index];
+                  final sugerencia = _sugerencias[index];
                   return ActionChip(
                     avatar: const Icon(
                       Icons.tips_and_updates_rounded,

@@ -51,8 +51,7 @@ void main() {
     expect(materia.iconoClave, 'red');
     expect(materia.apuntes, isEmpty);
     expect(materia.subtitulo, 'Sin apuntes');
-    expect(materia.esDemo, isFalse);
-    expect(materia.progreso, 0);
+    expect(materia.preguntas, isEmpty);
 
     final guardadas = await repositorio.obtenerMaterias();
     expect(guardadas, hasLength(1));

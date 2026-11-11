@@ -10,6 +10,9 @@ import '../utils/validadores.dart';
 /// Si se pasa [apunte], se abre con sus datos y guarda los cambios; si no,
 /// crea un apunte nuevo dentro de la materia [materiaId]. La fecha se asigna
 /// sola al crear y no se puede editar.
+///
+/// Un apunte escaneado llega con [tituloInicial] y [contenidoInicial] (lo que
+/// transcribió la IA) para que el usuario lo revise antes de guardarlo.
 class FormularioApunteScreen extends StatefulWidget {
   /// Materia a la que pertenece (o pertenecerá) el apunte.
   final String materiaId;
@@ -17,10 +20,18 @@ class FormularioApunteScreen extends StatefulWidget {
   /// Apunte a editar; `null` para crear uno nuevo.
   final Apunte? apunte;
 
+  /// Título propuesto para un apunte nuevo.
+  final String? tituloInicial;
+
+  /// Texto propuesto para un apunte nuevo.
+  final String? contenidoInicial;
+
   const FormularioApunteScreen({
     super.key,
     required this.materiaId,
     this.apunte,
+    this.tituloInicial,
+    this.contenidoInicial,
   });
 
   @override
@@ -37,14 +48,17 @@ class _FormularioApunteScreenState extends State<FormularioApunteScreen> {
 
   bool get _esEdicion => widget.apunte != null;
 
+  /// `true` si el formulario se abrió con el texto de una foto escaneada.
+  bool get _esEscaneado => !_esEdicion && widget.contenidoInicial != null;
+
   @override
   void initState() {
     super.initState();
     _controladorTitulo = TextEditingController(
-      text: widget.apunte?.titulo ?? '',
+      text: widget.apunte?.titulo ?? widget.tituloInicial ?? '',
     );
     _controladorTexto = TextEditingController(
-      text: widget.apunte?.contenido ?? '',
+      text: widget.apunte?.contenido ?? widget.contenidoInicial ?? '',
     );
   }
 
@@ -96,7 +110,11 @@ class _FormularioApunteScreenState extends State<FormularioApunteScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_esEdicion ? 'Editar apunte' : 'Nuevo apunte'),
+        title: Text(
+          _esEdicion
+              ? 'Editar apunte'
+              : (_esEscaneado ? 'Revisar apunte escaneado' : 'Nuevo apunte'),
+        ),
       ),
       body: SafeArea(
         top: false,
@@ -107,6 +125,14 @@ class _FormularioApunteScreenState extends State<FormularioApunteScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_esEscaneado) ...[
+                  Text(
+                    'La IA transcribió tu foto. Revisa el texto y corrige lo '
+                    'que haga falta antes de guardar.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 TextFormField(
                   key: const Key('campo-titulo-apunte'),
                   controller: _controladorTitulo,

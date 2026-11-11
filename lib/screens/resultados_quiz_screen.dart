@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/materia.dart';
 import '../theme/app_colors.dart';
+import 'preparar_quiz_screen.dart';
 import 'quiz_screen.dart';
 
-/// Pantalla que presenta el veredicto final tras completar las 5 preguntas del quiz.
+/// Pantalla que presenta el veredicto final tras completar el quiz.
 ///
 /// Muestra el porcentaje de aciertos en un círculo animado, un mensaje motivacional
-/// calibrado según el resultado, y botones para reiniciar la prueba o volver a la materia.
+/// calibrado según el resultado, y botones para repetir la prueba, pedir preguntas
+/// nuevas a la IA o volver a la materia.
 class ResultadosQuizScreen extends StatelessWidget {
   /// Cantidad de preguntas respondidas correctamente.
   final int correctas;
@@ -33,7 +35,7 @@ class ResultadosQuizScreen extends StatelessWidget {
     if (porcentaje >= 1.0) {
       return (
         '¡Desempeño Perfecto! 🏆',
-        '¡Felicidades, Edwin! Has respondido todo de manera impecable. Dominas completamente los temas de esta sesión.',
+        '¡Felicidades! Has respondido todo de manera impecable. Dominas completamente los temas de esta sesión.',
         Icons.workspace_premium_rounded,
         const Color(0xFF2E7D32),
       );
@@ -287,6 +289,39 @@ class ResultadosQuizScreen extends StatelessWidget {
                   label: const Text(
                     'Repetir quiz',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    side: BorderSide(
+                      color: esOscuro ? Colors.white30 : Colors.black26,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PrepararQuizScreen(
+                          materiaId: materia.id,
+                          regenerar: true,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: const Text(
+                    'Preguntas nuevas con IA',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                 ),
               ),

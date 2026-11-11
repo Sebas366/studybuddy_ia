@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/materia.dart';
+import '../providers/ajustes_provider.dart';
 import '../providers/estadisticas_provider.dart';
 import '../providers/materias_provider.dart';
 import '../providers/pomodoro_provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/calculos_estadisticas.dart';
 import '../utils/formato_tiempo.dart';
+import '../utils/reloj.dart';
 import '../widgets/dialogo_confirmar_borrado.dart';
 import '../widgets/formulario_materia.dart';
 import '../widgets/materia_card.dart';
@@ -16,9 +18,9 @@ import 'pomodoro_screen.dart';
 
 /// Pantalla de Inicio principal de StudyBuddy IA.
 ///
-/// Presenta el encabezado con saludo a Edwin, un estado vacío con botón para
-/// crear la primera materia y, cuando ya hay materias, el buscador reactivo
-/// en vivo y la lista de asignaturas reales guardadas en el dispositivo.
+/// Presenta el encabezado con el saludo al usuario, un estado vacío con botón
+/// para crear la primera materia (o cargar una de ejemplo) y, cuando ya hay
+/// materias, el buscador en vivo y la lista de asignaturas guardadas.
 class InicioScreen extends StatefulWidget {
   const InicioScreen({super.key});
 
@@ -95,7 +97,23 @@ class _InicioScreenState extends State<InicioScreen> {
     }).toList();
   }
 
-  /// Abre la hoja con las opciones "Editar" y "Borrar" de una materia real.
+  /// Crea la materia de ejemplo y avisa si no se pudo.
+  Future<void> _cargarEjemplo() async {
+    final provider = context.read<MateriasProvider>();
+    final mensajero = ScaffoldMessenger.of(context);
+    try {
+      await provider.crearMateriaDeEjemplo();
+    } catch (_) {
+      mensajero.showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo cargar la materia de ejemplo.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  /// Abre la hoja con las opciones "Editar" y "Borrar" de una materia.
   Future<void> _mostrarOpciones(Materia materia) async {
     final accion = await showModalBottomSheet<_AccionMateria>(
       context: context,
@@ -143,10 +161,12 @@ class _InicioScreenState extends State<InicioScreen> {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
     final provider = context.watch<MateriasProvider>();
+    final estadisticas = context.watch<EstadisticasProvider>();
     final racha = calcularRacha(
-      context.watch<EstadisticasProvider>().sesiones,
-      DateTime.now(),
+      estadisticas.sesiones,
+      context.watch<Reloj>()(),
     );
+    final nombre = context.select<AjustesProvider, String>((a) => a.nombre);
     final todas = provider.materias;
     final semestres = provider.semestres;
     final semestreActivo = _semestreActivo(semestres);
@@ -208,13 +228,13 @@ class _InicioScreenState extends State<InicioScreen> {
                             ),
                           ],
                         ),
-                        // Badge con foto o avatar de Edwin
+                        // Avatar con la inicial del usuario
                         CircleAvatar(
                           radius: 20,
                           backgroundColor: Colors.white.withValues(alpha: 0.25),
-                          child: const Text(
-                            'E',
-                            style: TextStyle(
+                          child: Text(
+                            nombre.characters.first.toUpperCase(),
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
@@ -224,9 +244,11 @@ class _InicioScreenState extends State<InicioScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    const Text(
-                      '¡Hola, Edwin! 👋',
-                      style: TextStyle(
+                    Text(
+                      '¡Hola, $nombre! 👋',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -282,7 +304,10 @@ class _InicioScreenState extends State<InicioScreen> {
                       onReintentar: provider.cargar,
                     )
                   else if (todas.isEmpty)
-                    _EstadoVacio(onCrear: _abrirFormulario)
+                    _EstadoVacio(
+                      onCrear: _abrirFormulario,
+                      onCargarEjemplo: _cargarEjemplo,
+                    )
                   else ...[
                     // --- BUSCADOR EN VIVO ---
                     TextField(
@@ -381,6 +406,10 @@ class _InicioScreenState extends State<InicioScreen> {
                         MateriaCard(
                           materia: materia,
                           semestre: mostrarSemestre ? materia.semestre : null,
+                          dominio: mejorIntento(
+                            estadisticas.intentos,
+                            materia.id,
+                          )?.proporcion,
                           onLongPress: () => _mostrarOpciones(materia),
                           onTap: () {
                             Navigator.push(
@@ -641,7 +670,10 @@ class _EstadoVacio extends StatelessWidget {
   /// Acción ejecutada al pulsar "Crear mi primera materia".
   final VoidCallback onCrear;
 
-  const _EstadoVacio({required this.onCrear});
+  /// Acción ejecutada al pulsar "Cargar una materia de ejemplo".
+  final VoidCallback onCargarEjemplo;
+
+  const _EstadoVacio({required this.onCrear, required this.onCargarEjemplo});
 
   @override
   Widget build(BuildContext context) {
@@ -692,6 +724,13 @@ class _EstadoVacio extends StatelessWidget {
               icon: const Icon(Icons.add_rounded),
               label: const Text('Crear mi primera materia'),
             ),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            key: const Key('cargar-materia-ejemplo'),
+            onPressed: onCargarEjemplo,
+            icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+            label: const Text('Cargar una materia de ejemplo'),
           ),
         ],
       ),
