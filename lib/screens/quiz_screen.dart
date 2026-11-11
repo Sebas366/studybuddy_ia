@@ -11,11 +11,11 @@ import 'resultados_quiz_screen.dart';
 
 /// Pantalla interactiva de evaluación tipo Quiz impulsada por IA.
 ///
-/// Presenta 5 preguntas secuenciales con selección única, botón "Comprobar",
+/// Presenta las preguntas una por una con selección única, botón "Comprobar",
 /// validación de colores verde/rojo, retroalimentación con la explicación de la IA,
 /// puntos acumulativos y una barra de progreso animada.
 class QuizScreen extends StatefulWidget {
-  /// Materia de la cual se cargará el banco de preguntas.
+  /// Materia cuyo quiz (las preguntas que generó la IA) se va a responder.
   final Materia materia;
 
   const QuizScreen({super.key, required this.materia});

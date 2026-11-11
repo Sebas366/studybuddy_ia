@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Llamadas a la API de IA (resumen, quiz, tutor, escaneo) y descarga de la tipografía. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Aviso al terminar un bloque de Pomodoro: notificación, vibración y alarma exacta. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
@@ -6,7 +8,7 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>
     <application
-        android:label="studybuddy_ia"
+        android:label="StudyBuddy IA"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

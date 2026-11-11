@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:studybuddy_ia/data/datos_demo.dart';
 import 'package:studybuddy_ia/providers/estadisticas_provider.dart';
 import 'package:studybuddy_ia/screens/quiz_screen.dart';
 
+import 'support/materia_de_prueba.dart';
 import 'support/repositorio_memoria.dart';
 
 void main() {
-  final materia = DatosDemo.materias.first;
+  const materia = materiaConQuiz;
 
   late RepositorioMemoria repositorio;
 

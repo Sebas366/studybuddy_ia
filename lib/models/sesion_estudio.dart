@@ -1,29 +1,32 @@
-/// Representa un bloque o sesión de estudio planificada para la jornada.
+/// Bloque de estudio que el estudiante planea para un día y una hora.
 class SesionEstudio {
   /// Identificador único de la sesión.
   final String id;
 
-  /// Nombre de la materia asignada a la sesión.
-  final String materia;
+  /// Materia de la sesión; `null` si es estudio libre.
+  final String? materiaId;
 
   /// Tema específico que se abordará en la sesión.
   final String tema;
 
-  /// Horario planeado para el estudio (ej. "09:00 AM - 10:30 AM").
-  final String hora;
+  /// Día y hora en que empieza la sesión.
+  final DateTime inicio;
 
-  /// Duración estimada de la sesión en minutos.
+  /// Duración planeada en minutos.
   final int duracionMinutos;
 
-  /// Estado de cumplimiento marcado por el estudiante.
-  bool completada;
+  /// `true` si el estudiante ya la marcó como hecha.
+  final bool completada;
 
-  SesionEstudio({
+  const SesionEstudio({
     required this.id,
-    required this.materia,
+    required this.materiaId,
     required this.tema,
-    required this.hora,
+    required this.inicio,
     required this.duracionMinutos,
     this.completada = false,
   });
+
+  /// Momento en que termina la sesión.
+  DateTime get fin => inicio.add(Duration(minutes: duracionMinutos));
 }

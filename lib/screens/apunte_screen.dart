@@ -1,25 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../models/apunte.dart';
 import '../models/materia.dart';
-import '../widgets/aviso_ia_fase3.dart';
+import '../providers/materias_provider.dart';
+import '../theme/app_colors.dart';
+import 'resumen_ia_screen.dart';
 
-/// Pantalla para leer un apunte real: su título, fecha y texto.
+/// Pantalla para leer un apunte: su título, fecha y texto, con acceso al
+/// resumen que genera la IA.
 ///
-/// Las ideas clave, los resúmenes y el quiz con IA no existen todavía para los
-/// apuntes reales, así que en su lugar se muestra el [AvisoIaFase3].
+/// El apunte se lee en vivo del [MateriasProvider], así que refleja de
+/// inmediato si ya tiene resumen; si se borra, la pantalla se cierra.
 class ApunteScreen extends StatelessWidget {
-  /// Apunte que se muestra.
-  final Apunte apunte;
-
   /// Materia a la que pertenece el apunte.
-  final Materia materia;
+  final String materiaId;
 
-  const ApunteScreen({super.key, required this.apunte, required this.materia});
+  /// Apunte que se muestra.
+  final String apunteId;
+
+  const ApunteScreen({
+    super.key,
+    required this.materiaId,
+    required this.apunteId,
+  });
 
   /// Copia el título, la materia y el texto del apunte al portapapeles.
-  Future<void> _copiar(BuildContext context) async {
+  Future<void> _copiar(
+    BuildContext context,
+    Materia materia,
+    Apunte apunte,
+  ) async {
     final mensajero = ScaffoldMessenger.of(context);
     final texto = StringBuffer()
       ..writeln('📌 ${apunte.titulo}')
@@ -44,6 +56,20 @@ class ApunteScreen extends StatelessWidget {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
 
+    final materia = context.watch<MateriasProvider>().porId(materiaId);
+    Apunte? buscado;
+    for (final candidato in materia?.apuntes ?? const <Apunte>[]) {
+      if (candidato.id == apunteId) buscado = candidato;
+    }
+    final apunte = buscado;
+    if (materia == null || apunte == null) {
+      // El apunte o su materia se borraron mientras la pantalla estaba abierta.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) Navigator.of(context).maybePop();
+      });
+      return const Scaffold();
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Apunte'),
@@ -51,7 +77,7 @@ class ApunteScreen extends StatelessWidget {
           IconButton(
             tooltip: 'Copiar apunte',
             icon: const Icon(Icons.copy_rounded),
-            onPressed: () => _copiar(context),
+            onPressed: () => _copiar(context, materia, apunte),
           ),
         ],
       ),
@@ -150,8 +176,38 @@ class ApunteScreen extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              const AvisoIaFase3(),
-              const SizedBox(height: 20),
+              // Acceso al resumen con IA
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  key: const Key('resumir-apunte'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primario,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ResumenIaScreen(
+                        materiaId: materiaId,
+                        apunteId: apunteId,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: Text(
+                    apunte.tieneResumen
+                        ? 'Ver resumen con IA'
+                        : 'Resumir con IA',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               SizedBox(
                 width: double.infinity,
@@ -165,7 +221,7 @@ class ApunteScreen extends StatelessWidget {
                       color: esOscuro ? Colors.white30 : Colors.black26,
                     ),
                   ),
-                  onPressed: () => _copiar(context),
+                  onPressed: () => _copiar(context, materia, apunte),
                   icon: const Icon(Icons.copy_rounded, size: 18),
                   label: const Text(
                     'Copiar',

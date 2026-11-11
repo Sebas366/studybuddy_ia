@@ -18,7 +18,7 @@ class Apunte {
   /// Contenido textual completo del apunte original.
   final String contenido;
 
-  /// Lista de ideas clave identificadas por la IA (al menos 4 ideas).
+  /// Lista de ideas clave identificadas por la IA.
   final List<String> ideasClave;
 
   /// Resumen ultra conciso (1-2 oraciones) generado por la IA.
@@ -30,7 +30,7 @@ class Apunte {
   /// Resumen extenso y detallado para un repaso exhaustivo.
   final String resumenDetallado;
 
-  /// Los campos de IA son opcionales: un apunte real los deja vacíos hasta la Fase 3.
+  /// Los campos de IA son opcionales: quedan vacíos hasta que se pide el resumen.
   const Apunte({
     required this.id,
     required this.titulo,
@@ -42,4 +42,7 @@ class Apunte {
     this.resumenMedio = '',
     this.resumenDetallado = '',
   });
+
+  /// `true` si la IA ya generó el resumen de este apunte.
+  bool get tieneResumen => resumenMedio.isNotEmpty;
 }

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:studybuddy_ia/data/datos_demo.dart';
-import 'package:studybuddy_ia/screens/detalle_materia_screen.dart';
 import 'package:studybuddy_ia/utils/formato_fecha.dart';
 
 import 'support/abrir_app.dart';
@@ -12,7 +10,9 @@ void main() {
   const campoTitulo = Key('campo-titulo-apunte');
   const campoTexto = Key('campo-texto-apunte');
   const botonGuardarApunte = Key('guardar-apunte');
-  const textoVacio = 'Aún no tienes apuntes. Toca "+ Nuevo" para crear el primero.';
+  const textoVacio =
+      'Aún no tienes apuntes. Toca "+ Nuevo" para escribir el primero o '
+      '"Escanear" para pasar una foto a texto.';
 
   /// Abre la app con una materia real llamada 'Redes' y entra a su detalle.
   Future<void> entrarAlDetalle(
@@ -200,22 +200,14 @@ void main() {
     expect(find.text('Redes II'), findsOneWidget);
   });
 
-  testWidgets('Una materia de demostración no muestra menú ni "+ Nuevo"',
+  testWidgets('El "% dominado" aparece con el mejor quiz de la materia',
       (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(800, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    final repositorio = RepositorioMemoria();
+    final id = await sembrarMateria(repositorio, 'Redes');
+    await repositorio.registrarIntentoQuiz(materiaId: id, aciertos: 2, total: 5);
+    await repositorio.registrarIntentoQuiz(materiaId: id, aciertos: 4, total: 5);
+    await entrarAlDetalle(tester, repositorio);
 
-    await tester.pumpWidget(
-      conProveedoresDePrueba(
-        DetalleMateriaScreen(materia: DatosDemo.materias.first),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('menu-materia')), findsNothing);
-    expect(find.byKey(botonNuevoApunte), findsNothing);
-    expect(find.textContaining('dominado'), findsOneWidget);
+    expect(find.text('80% dominado'), findsOneWidget);
   });
 }

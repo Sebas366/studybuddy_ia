@@ -5,8 +5,8 @@ import 'pregunta.dart';
 
 /// Representa una materia o asignatura del estudiante.
 ///
-/// Agrupa los apuntes, preguntas de quiz generadas, progreso del alumno
-/// y configuraciones visuales (colores e icono para animaciones Hero).
+/// Agrupa los apuntes, las preguntas del último quiz generado y la
+/// configuración visual (colores e icono para animaciones Hero).
 class Materia {
   /// Identificador único de la materia.
   final String id;
@@ -14,14 +14,11 @@ class Materia {
   /// Nombre oficial de la materia.
   final String nombre;
 
-  /// Subtítulo o resumen de estado de la materia (ej. "Laboratorios MIPS • 1 Quiz pendiente").
+  /// Subtítulo con el estado de la materia (ej. "3 apuntes").
   final String subtitulo;
 
   /// Descripción detallada de los contenidos o enfoque de la asignatura.
   final String descripcion;
-
-  /// Porcentaje de progreso de estudio entre 0.0 y 1.0.
-  final double progreso;
 
   /// Icono representativo de la materia para uso en tarjetas y transiciones Hero.
   final IconData icono;
@@ -35,17 +32,8 @@ class Materia {
   /// Lista de apuntes cargados y procesados para esta materia.
   final List<Apunte> apuntes;
 
-  /// Banco de preguntas de evaluación generadas por la IA para esta materia.
+  /// Último quiz que la IA generó para esta materia (vacío si aún no hay ninguno).
   final List<Pregunta> preguntas;
-
-  /// Respuestas simuladas que el Tutor IA utilizará al dialogar sobre esta materia.
-  final List<String> respuestasSimuladasIa;
-
-  /// Indica si es una materia de demostración (datos de `DatosDemo`).
-  ///
-  /// Las materias de demostración no se guardan en la base de datos y conservan
-  /// sus pantallas simuladas de IA; las reales muestran el aviso de la Fase 3.
-  final bool esDemo;
 
   /// Índice del degradado elegido en el catálogo de colores.
   final int colorIndice;
@@ -53,7 +41,7 @@ class Materia {
   /// Clave del icono elegido en el catálogo de iconos.
   final String iconoClave;
 
-  /// Semestre al que pertenece la materia (ej. `2026-2`); vacío en las de demostración.
+  /// Semestre al que pertenece la materia (ej. `2026-2`).
   final String semestre;
 
   const Materia({
@@ -61,14 +49,11 @@ class Materia {
     required this.nombre,
     required this.subtitulo,
     required this.descripcion,
-    required this.progreso,
     required this.icono,
     required this.colorInicio,
     required this.colorFin,
     required this.apuntes,
-    required this.preguntas,
-    required this.respuestasSimuladasIa,
-    this.esDemo = false,
+    this.preguntas = const [],
     this.colorIndice = 0,
     this.iconoClave = 'libro',
     this.semestre = '',

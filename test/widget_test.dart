@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:studybuddy_ia/theme/app_theme.dart';
 
 import 'support/abrir_app.dart';
 import 'support/repositorio_memoria.dart';
@@ -14,7 +13,7 @@ void main() {
       (WidgetTester tester) async {
     await abrirApp(tester, RepositorioMemoria());
 
-    expect(find.text('¡Hola, Edwin! 👋'), findsOneWidget);
+    expect(find.text('¡Hola, Estudiante! 👋'), findsOneWidget);
     expect(find.text('¿Qué vamos a repasar hoy?'), findsOneWidget);
     expect(find.text('Aún no tienes materias'), findsOneWidget);
     expect(find.byKey(botonCrearPrimera), findsOneWidget);
@@ -127,7 +126,7 @@ void main() {
     await tester.tap(find.text('Plan'));
     await tester.pumpAndSettle();
     expect(find.text('Plan de Estudio'), findsOneWidget);
-    expect(find.text('Próximo Parcial'), findsOneWidget);
+    expect(find.text('Sin evaluaciones a la vista'), findsOneWidget);
     expect(find.text('Sesiones de Hoy'), findsOneWidget);
 
     // Pestaña Stats
@@ -141,14 +140,15 @@ void main() {
     await tester.tap(find.text('Perfil'));
     await tester.pumpAndSettle();
     expect(find.text('Mi Perfil'), findsOneWidget);
-    expect(find.text('Edwin'), findsOneWidget);
+    expect(find.text('Estudiante'), findsOneWidget);
     expect(find.text('Modo Oscuro'), findsOneWidget);
+    expect(find.text('Inteligencia artificial'), findsOneWidget);
     expect(find.text('Acerca de StudyBuddy IA'), findsOneWidget);
 
     // Volver a Inicio
     await tester.tap(find.text('Inicio'));
     await tester.pumpAndSettle();
-    expect(find.text('¡Hola, Edwin! 👋'), findsOneWidget);
+    expect(find.text('¡Hola, Estudiante! 👋'), findsOneWidget);
   });
 
   testWidgets('Buscador filtra materias reales', (WidgetTester tester) async {
@@ -206,9 +206,12 @@ void main() {
     final switchModoOscuro = find.widgetWithText(SwitchListTile, 'Modo Oscuro');
     expect(switchModoOscuro, findsOneWidget);
 
+    BuildContext contexto() => tester.element(find.text('Mi Perfil'));
+    expect(Theme.of(contexto()).brightness, Brightness.light);
+
     await tester.tap(switchModoOscuro);
     await tester.pumpAndSettle();
 
-    expect(modoTemaGlobal.value, isNotNull);
+    expect(Theme.of(contexto()).brightness, Brightness.dark);
   });
 }

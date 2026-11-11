@@ -4,9 +4,14 @@ import 'package:studybuddy_ia/data/catalogo_materia.dart';
 import 'package:studybuddy_ia/data/materias_repository.dart';
 import 'package:studybuddy_ia/models/apunte.dart';
 import 'package:studybuddy_ia/models/estado_pomodoro.dart';
+import 'package:studybuddy_ia/models/evaluacion.dart';
 import 'package:studybuddy_ia/models/intento_quiz.dart';
 import 'package:studybuddy_ia/models/materia.dart';
+import 'package:studybuddy_ia/models/mensaje_chat.dart';
+import 'package:studybuddy_ia/models/pregunta.dart';
+import 'package:studybuddy_ia/models/resultados_ia.dart';
 import 'package:studybuddy_ia/models/sesion_enfoque.dart';
+import 'package:studybuddy_ia/models/sesion_estudio.dart';
 import 'package:studybuddy_ia/utils/formato_fecha.dart';
 
 /// Registro interno de una materia dentro de [RepositorioMemoria].
@@ -29,6 +34,9 @@ class _RegistroMateria {
 
   /// Apuntes de la materia, el más nuevo primero.
   final List<Apunte> apuntes = [];
+
+  /// Preguntas del último quiz generado.
+  List<Pregunta> preguntas = const [];
 }
 
 /// Repositorio falso que guarda todo en memoria, para las pruebas de widgets.
@@ -42,6 +50,11 @@ class RepositorioMemoria implements MateriasRepository {
   /// Sesiones e intentos en orden de registro (el más viejo primero).
   final List<SesionEnfoque> _sesiones = [];
   final List<IntentoQuiz> _intentos = [];
+
+  /// Chat con el tutor por materia, evaluaciones y sesiones del plan (en orden de registro).
+  final Map<String, List<MensajeChat>> _mensajes = {};
+  final List<Evaluacion> _evaluaciones = [];
+  final List<SesionEstudio> _sesionesPlan = [];
 
   /// Bloque de Pomodoro en curso y ajustes de la app.
   EstadoPomodoro? _pomodoroEnCurso;
@@ -57,13 +70,11 @@ class RepositorioMemoria implements MateriasRepository {
       nombre: registro.nombre,
       subtitulo: Materia.subtituloPorConteo(registro.apuntes.length),
       descripcion: registro.descripcion,
-      progreso: 0,
       icono: CatalogoMateria.iconoPorClave(registro.iconoClave),
       colorInicio: degradado[0],
       colorFin: degradado[1],
       apuntes: List.unmodifiable(registro.apuntes),
-      preguntas: const [],
-      respuestasSimuladasIa: const [],
+      preguntas: List.unmodifiable(registro.preguntas),
       colorIndice: registro.colorIndice,
       iconoClave: registro.iconoClave,
       semestre: registro.semestre,
@@ -120,6 +131,9 @@ class RepositorioMemoria implements MateriasRepository {
     _materias.removeWhere((registro) => registro.id == id);
     _sesiones.removeWhere((sesion) => sesion.materiaId == id);
     _intentos.removeWhere((intento) => intento.materiaId == id);
+    _mensajes.remove(id);
+    _evaluaciones.removeWhere((evaluacion) => evaluacion.materiaId == id);
+    _sesionesPlan.removeWhere((sesion) => sesion.materiaId == id);
   }
 
   @override
@@ -149,15 +163,211 @@ class RepositorioMemoria implements MateriasRepository {
       final indice = registro.apuntes.indexWhere((a) => a.id == id);
       if (indice == -1) continue;
       final anterior = registro.apuntes[indice];
+      // Si cambia el texto, el resumen de la IA se descarta.
+      final conservar = anterior.contenido == contenido;
       registro.apuntes[indice] = Apunte(
         id: anterior.id,
         titulo: titulo,
         materiaId: anterior.materiaId,
         fecha: anterior.fecha,
         contenido: contenido,
+        ideasClave: conservar ? anterior.ideasClave : const [],
+        resumenCorto: conservar ? anterior.resumenCorto : '',
+        resumenMedio: conservar ? anterior.resumenMedio : '',
+        resumenDetallado: conservar ? anterior.resumenDetallado : '',
       );
       return;
     }
+  }
+
+  @override
+  Future<void> guardarResumenApunte(
+    String apunteId,
+    ResumenApunte resumen,
+  ) async {
+    for (final registro in _materias) {
+      final indice = registro.apuntes.indexWhere((a) => a.id == apunteId);
+      if (indice == -1) continue;
+      final anterior = registro.apuntes[indice];
+      registro.apuntes[indice] = Apunte(
+        id: anterior.id,
+        titulo: anterior.titulo,
+        materiaId: anterior.materiaId,
+        fecha: anterior.fecha,
+        contenido: anterior.contenido,
+        ideasClave: resumen.ideasClave,
+        resumenCorto: resumen.corto,
+        resumenMedio: resumen.medio,
+        resumenDetallado: resumen.detallado,
+      );
+      return;
+    }
+  }
+
+  @override
+  Future<void> reemplazarPreguntas(
+    String materiaId,
+    List<Pregunta> preguntas,
+  ) async {
+    _buscar(materiaId).preguntas = [
+      for (final pregunta in preguntas)
+        Pregunta(
+          id: _nuevoId('pre'),
+          enunciado: pregunta.enunciado,
+          opciones: pregunta.opciones,
+          indiceRespuestaCorrecta: pregunta.indiceRespuestaCorrecta,
+          explicacionIa: pregunta.explicacionIa,
+        ),
+    ];
+  }
+
+  @override
+  Future<List<MensajeChat>> obtenerMensajesChat(String materiaId) async => [
+    ...?_mensajes[materiaId],
+  ];
+
+  @override
+  Future<MensajeChat> agregarMensajeChat({
+    required String materiaId,
+    required String texto,
+    required bool esUsuario,
+  }) async {
+    final mensaje = MensajeChat(
+      id: _nuevoId('msg'),
+      texto: texto,
+      esUsuario: esUsuario,
+      fecha: DateTime.now(),
+    );
+    _mensajes.putIfAbsent(materiaId, () => []).add(mensaje);
+    return mensaje;
+  }
+
+  @override
+  Future<void> borrarMensajesChat(String materiaId) async {
+    _mensajes.remove(materiaId);
+  }
+
+  @override
+  Future<List<Evaluacion>> obtenerEvaluaciones() async {
+    // La de fecha más cercana primero; en un empate, la registrada antes.
+    final indices = List<int>.generate(_evaluaciones.length, (i) => i);
+    indices.sort((a, b) {
+      final porFecha = _evaluaciones[a].fecha.compareTo(_evaluaciones[b].fecha);
+      return porFecha != 0 ? porFecha : a.compareTo(b);
+    });
+    return [for (final i in indices) _evaluaciones[i]];
+  }
+
+  @override
+  Future<Evaluacion> crearEvaluacion({
+    required String materiaId,
+    required String titulo,
+    required DateTime fecha,
+    required String temas,
+  }) async {
+    final evaluacion = Evaluacion(
+      id: _nuevoId('eva'),
+      materiaId: materiaId,
+      titulo: titulo,
+      fecha: fecha,
+      temas: temas,
+    );
+    _evaluaciones.add(evaluacion);
+    return evaluacion;
+  }
+
+  @override
+  Future<void> actualizarEvaluacion({
+    required String id,
+    required String materiaId,
+    required String titulo,
+    required DateTime fecha,
+    required String temas,
+  }) async {
+    final indice = _evaluaciones.indexWhere((e) => e.id == id);
+    if (indice == -1) return;
+    _evaluaciones[indice] = Evaluacion(
+      id: id,
+      materiaId: materiaId,
+      titulo: titulo,
+      fecha: fecha,
+      temas: temas,
+    );
+  }
+
+  @override
+  Future<void> borrarEvaluacion(String id) async {
+    _evaluaciones.removeWhere((evaluacion) => evaluacion.id == id);
+  }
+
+  @override
+  Future<List<SesionEstudio>> obtenerSesionesPlan() async {
+    final indices = List<int>.generate(_sesionesPlan.length, (i) => i);
+    indices.sort((a, b) {
+      final porInicio = _sesionesPlan[a].inicio.compareTo(
+        _sesionesPlan[b].inicio,
+      );
+      return porInicio != 0 ? porInicio : a.compareTo(b);
+    });
+    return [for (final i in indices) _sesionesPlan[i]];
+  }
+
+  @override
+  Future<SesionEstudio> crearSesionPlan({
+    String? materiaId,
+    required String tema,
+    required DateTime inicio,
+    required int duracionMinutos,
+  }) async {
+    final sesion = SesionEstudio(
+      id: _nuevoId('pla'),
+      materiaId: materiaId,
+      tema: tema,
+      inicio: inicio,
+      duracionMinutos: duracionMinutos,
+    );
+    _sesionesPlan.add(sesion);
+    return sesion;
+  }
+
+  @override
+  Future<void> actualizarSesionPlan({
+    required String id,
+    String? materiaId,
+    required String tema,
+    required DateTime inicio,
+    required int duracionMinutos,
+  }) async {
+    final indice = _sesionesPlan.indexWhere((s) => s.id == id);
+    if (indice == -1) return;
+    _sesionesPlan[indice] = SesionEstudio(
+      id: id,
+      materiaId: materiaId,
+      tema: tema,
+      inicio: inicio,
+      duracionMinutos: duracionMinutos,
+      completada: _sesionesPlan[indice].completada,
+    );
+  }
+
+  @override
+  Future<void> marcarSesionPlan(String id, {required bool completada}) async {
+    final indice = _sesionesPlan.indexWhere((s) => s.id == id);
+    if (indice == -1) return;
+    final anterior = _sesionesPlan[indice];
+    _sesionesPlan[indice] = SesionEstudio(
+      id: id,
+      materiaId: anterior.materiaId,
+      tema: anterior.tema,
+      inicio: anterior.inicio,
+      duracionMinutos: anterior.duracionMinutos,
+      completada: completada,
+    );
+  }
+
+  @override
+  Future<void> borrarSesionPlan(String id) async {
+    _sesionesPlan.removeWhere((sesion) => sesion.id == id);
   }
 
   @override

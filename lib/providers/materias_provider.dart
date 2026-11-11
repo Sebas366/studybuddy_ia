@@ -3,12 +3,15 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../data/catalogo_materia.dart';
+import '../data/materia_ejemplo.dart';
 import '../data/materias_repository.dart';
 import '../models/materia.dart';
+import '../models/pregunta.dart';
+import '../models/resultados_ia.dart';
 import '../utils/semestres.dart';
 import '../utils/validadores.dart';
 
-/// Estado de las materias y apuntes reales del usuario.
+/// Estado de las materias y apuntes del usuario, con lo que la IA generó para ellos.
 ///
 /// Después de cada cambio recarga la lista completa desde el repositorio y
 /// notifica a las pantallas. Las operaciones recortan los textos y validan los
@@ -163,6 +166,41 @@ class MateriasProvider extends ChangeNotifier {
   /// Borra un apunte.
   Future<void> borrarApunte(String id) async {
     await _repositorio.borrarApunte(id);
+    await cargar();
+  }
+
+  /// Guarda el resumen que la IA generó para un apunte.
+  Future<void> guardarResumen(String apunteId, ResumenApunte resumen) async {
+    await _repositorio.guardarResumenApunte(apunteId, resumen);
+    await cargar();
+  }
+
+  /// Guarda el quiz recién generado de una materia, reemplazando el anterior.
+  Future<void> guardarPreguntas(
+    String materiaId,
+    List<Pregunta> preguntas,
+  ) async {
+    await _repositorio.reemplazarPreguntas(materiaId, preguntas);
+    await cargar();
+  }
+
+  /// Crea la materia de ejemplo con sus apuntes, para probar la app sin escribir nada.
+  Future<void> crearMateriaDeEjemplo() async {
+    final materia = await _repositorio.crearMateria(
+      nombre: MateriaEjemplo.nombre,
+      descripcion: MateriaEjemplo.descripcion,
+      colorIndice: MateriaEjemplo.colorIndice,
+      iconoClave: MateriaEjemplo.iconoClave,
+      semestre: semestreActual(DateTime.now()),
+    );
+    // Se insertan al revés para que el primero de la lista quede arriba.
+    for (final apunte in MateriaEjemplo.apuntes.reversed) {
+      await _repositorio.crearApunte(
+        materiaId: materia.id,
+        titulo: apunte.titulo,
+        contenido: apunte.contenido,
+      );
+    }
     await cargar();
   }
 }

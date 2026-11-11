@@ -1,28 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
 import '../models/apunte.dart';
 import '../models/materia.dart';
+import '../providers/ia_provider.dart';
+import '../providers/materias_provider.dart';
+import '../services/servicio_ia.dart';
 import '../theme/app_colors.dart';
-import 'quiz_screen.dart';
+import '../widgets/dialogo_clave_ia.dart';
+import '../widgets/estado_ia.dart';
+import 'preparar_quiz_screen.dart';
 
 /// Nivel de profundidad del resumen generado por la IA.
 enum NivelResumen { corto, medio, detallado }
 
-/// Pantalla que presenta el resumen estructurado de un apunte asistido por IA.
+/// Pantalla que presenta el resumen de un apunte generado por la IA.
 ///
-/// Incluye un [SegmentedButton] con tres niveles de detalle (Corto, Medio, Detallado),
-/// tarjetas numeradas para las 4 ideas clave y acciones para copiar o generar un quiz.
+/// Si el apunte todavía no tiene resumen, lo pide a la IA al abrirse y lo
+/// guarda, de modo que la próxima vez se muestra al instante y sin conexión.
+/// Incluye un [SegmentedButton] con tres niveles de detalle (Corto, Medio,
+/// Detallado), tarjetas numeradas con las ideas clave y acciones para copiar,
+/// regenerar el resumen o pasar al quiz.
 class ResumenIaScreen extends StatefulWidget {
-  /// Apunte seleccionado para visualizar su síntesis.
-  final Apunte apunte;
-
   /// Materia a la que pertenece el apunte.
-  final Materia materia;
+  final String materiaId;
+
+  /// Apunte que se resume.
+  final String apunteId;
 
   const ResumenIaScreen({
     super.key,
-    required this.apunte,
-    required this.materia,
+    required this.materiaId,
+    required this.apunteId,
   });
 
   @override
@@ -33,30 +43,100 @@ class _ResumenIaScreenState extends State<ResumenIaScreen> {
   /// Nivel de resumen actualmente seleccionado en el SegmentedButton.
   Set<NivelResumen> _seleccionResumen = {NivelResumen.medio};
 
+  /// `true` mientras la IA escribe el resumen.
+  bool _generando = false;
+
+  /// Mensaje del último error de la IA; `null` si no hubo.
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Al abrir un apunte sin resumen se pide de una vez.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final apunte = _buscarApunte(context.read<MateriasProvider>());
+      if (apunte != null && !apunte.tieneResumen) _generar();
+    });
+  }
+
+  Apunte? _buscarApunte(MateriasProvider provider) {
+    final materia = provider.porId(widget.materiaId);
+    for (final apunte in materia?.apuntes ?? const <Apunte>[]) {
+      if (apunte.id == widget.apunteId) return apunte;
+    }
+    return null;
+  }
+
+  /// Pide el resumen a la IA y lo guarda en el apunte.
+  Future<void> _generar() async {
+    if (_generando) return;
+    final provider = context.read<MateriasProvider>();
+    final ia = context.read<IaProvider>();
+    final materia = provider.porId(widget.materiaId);
+    final apunte = _buscarApunte(provider);
+    if (materia == null || apunte == null) return;
+
+    if (!await asegurarClaveIa(context)) {
+      if (mounted) {
+        setState(() => _error = const ErrorIa.sinClave().mensaje);
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _generando = true;
+      _error = null;
+    });
+    try {
+      final resumen = await ia.servicio.resumirApunte(
+        materia: materia.nombre,
+        titulo: apunte.titulo,
+        contenido: apunte.contenido,
+      );
+      await provider.guardarResumen(apunte.id, resumen);
+    } on ErrorIa catch (fallo) {
+      _error = fallo.mensaje;
+    } catch (_) {
+      _error = 'No se pudo guardar el resumen. Inténtalo de nuevo.';
+    }
+    if (!mounted) return;
+    setState(() => _generando = false);
+    // Si falló al regenerar, el resumen anterior sigue en pantalla: se avisa aparte.
+    final error = _error;
+    if (error != null && apunte.tieneResumen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), behavior: SnackBarBehavior.floating),
+      );
+    }
+  }
+
   /// Obtiene el texto correspondiente según el nivel de resumen activo.
-  String get _textoResumenActual {
+  String _textoResumen(Apunte apunte) {
     final nivel = _seleccionResumen.first;
     switch (nivel) {
       case NivelResumen.corto:
-        return widget.apunte.resumenCorto;
+        return apunte.resumenCorto;
       case NivelResumen.medio:
-        return widget.apunte.resumenMedio;
+        return apunte.resumenMedio;
       case NivelResumen.detallado:
-        return widget.apunte.resumenDetallado;
+        return apunte.resumenDetallado;
     }
   }
 
   /// Copia el resumen actual y las ideas clave al portapapeles del dispositivo.
-  Future<void> _copiarAlPortapapeles() async {
+  Future<void> _copiarAlPortapapeles(Materia materia, Apunte apunte) async {
     final contenidoCompleto = StringBuffer()
-      ..writeln('📌 ${widget.apunte.titulo}')
-      ..writeln('Materia: ${widget.materia.nombre}')
-      ..writeln('\n--- Resumen IA (${_seleccionResumen.first.name.toUpperCase()}) ---')
-      ..writeln(_textoResumenActual)
+      ..writeln('📌 ${apunte.titulo}')
+      ..writeln('Materia: ${materia.nombre}')
+      ..writeln(
+        '\n--- Resumen IA (${_seleccionResumen.first.name.toUpperCase()}) ---',
+      )
+      ..writeln(_textoResumen(apunte))
       ..writeln('\n--- Ideas Clave ---');
 
-    for (var i = 0; i < widget.apunte.ideasClave.length; i++) {
-      contenidoCompleto.writeln('${i + 1}. ${widget.apunte.ideasClave[i]}');
+    for (var i = 0; i < apunte.ideasClave.length; i++) {
+      contenidoCompleto.writeln('${i + 1}. ${apunte.ideasClave[i]}');
     }
 
     await Clipboard.setData(ClipboardData(text: contenidoCompleto.toString()));
@@ -82,299 +162,347 @@ class _ResumenIaScreenState extends State<ResumenIaScreen> {
     final tema = Theme.of(context);
     final esOscuro = tema.brightness == Brightness.dark;
 
+    final provider = context.watch<MateriasProvider>();
+    final materia = provider.porId(widget.materiaId);
+    final apunte = _buscarApunte(provider);
+    if (materia == null || apunte == null) {
+      // El apunte o su materia se borraron mientras la pantalla estaba abierta.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).maybePop();
+      });
+      return const Scaffold();
+    }
+
+    final listo = apunte.tieneResumen && !_generando;
+    final Widget cuerpo;
+    if (_generando) {
+      cuerpo = const CargandoIa(mensaje: 'Resumiendo tu apunte...');
+    } else if (!apunte.tieneResumen) {
+      cuerpo = ErrorDeIa(
+        mensaje: _error ?? 'Este apunte todavía no tiene resumen.',
+        onReintentar: _generar,
+      );
+    } else {
+      cuerpo = _construirResumen(tema, esOscuro, materia, apunte);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Resumen Inteligente'),
         actions: [
-          IconButton(
-            tooltip: 'Copiar resumen',
-            icon: const Icon(Icons.copy_rounded),
-            onPressed: _copiarAlPortapapeles,
-          ),
+          if (listo) ...[
+            IconButton(
+              key: const Key('regenerar-resumen'),
+              tooltip: 'Generar de nuevo',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: _generar,
+            ),
+            IconButton(
+              tooltip: 'Copiar resumen',
+              icon: const Icon(Icons.copy_rounded),
+              onPressed: () => _copiarAlPortapapeles(materia, apunte),
+            ),
+          ],
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Cabecera con título del apunte y etiqueta de la materia
+      body: SafeArea(top: false, child: cuerpo),
+    );
+  }
+
+  /// Contenido de la pantalla cuando el resumen ya existe.
+  Widget _construirResumen(
+    ThemeData tema,
+    bool esOscuro,
+    Materia materia,
+    Apunte apunte,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cabecera con título del apunte y etiqueta de la materia
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: esOscuro ? const Color(0xFF23202B) : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: esOscuro
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.04),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: esOscuro ? 0.3 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: materia.colorInicio.withValues(
+                          alpha: esOscuro ? 0.25 : 0.15,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        materia.nombre,
+                        style: TextStyle(
+                          color: materia.colorInicio,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      apunte.fecha,
+                      style: tema.textTheme.labelSmall?.copyWith(
+                        color: esOscuro ? Colors.white54 : Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  apunte.titulo,
+                  style: tema.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Selector interactivo de nivel de profundidad (SegmentedButton)
+          Center(
+            child: SegmentedButton<NivelResumen>(
+              segments: const [
+                ButtonSegment<NivelResumen>(
+                  value: NivelResumen.corto,
+                  label: Text('Corto'),
+                  icon: Icon(Icons.flash_on_rounded, size: 16),
+                ),
+                ButtonSegment<NivelResumen>(
+                  value: NivelResumen.medio,
+                  label: Text('Medio'),
+                  icon: Icon(Icons.menu_book_rounded, size: 16),
+                ),
+                ButtonSegment<NivelResumen>(
+                  value: NivelResumen.detallado,
+                  label: Text('Detallado'),
+                  icon: Icon(Icons.auto_awesome_rounded, size: 16),
+                ),
+              ],
+              selected: _seleccionResumen,
+              onSelectionChanged: (nuevaSeleccion) {
+                setState(() {
+                  _seleccionResumen = nuevaSeleccion;
+                });
+              },
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Tarjeta con el texto del resumen generado
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: esOscuro
+                  ? AppColors.primario.withValues(alpha: 0.12)
+                  : const Color(0xFFF3EDF7),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.primario.withValues(
+                  alpha: esOscuro ? 0.35 : 0.2,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.psychology_rounded,
+                      color: AppColors.primario,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Síntesis generada por IA',
+                      style: tema.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primario,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _textoResumen(apunte),
+                  style: tema.textTheme.bodyMedium?.copyWith(
+                    fontSize: 14.5,
+                    height: 1.55,
+                    color: esOscuro ? Colors.white : const Color(0xFF2B2533),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 26),
+
+          // Sección de Ideas Clave (las 4 ideas de estudio)
+          Row(
+            children: [
+              const Icon(
+                Icons.lightbulb_rounded,
+                color: Color(0xFFFFA000),
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Ideas Clave (${apunte.ideasClave.length})',
+                style: tema.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Iteración de las ideas clave en tarjetas numeradas
+          for (var i = 0; i < apunte.ideasClave.length; i++)
             Container(
-              padding: const EdgeInsets.all(18),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: esOscuro ? const Color(0xFF23202B) : Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: esOscuro
                       ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.04),
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: esOscuro ? 0.3 : 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withValues(
+                      alpha: esOscuro ? 0.25 : 0.03,
+                    ),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Column(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: widget.materia.colorInicio
-                              .withValues(alpha: esOscuro ? 0.25 : 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          widget.materia.nombre,
-                          style: TextStyle(
-                            color: widget.materia.colorInicio,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11.5,
-                          ),
-                        ),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: materia.colorInicio.withValues(
+                        alpha: esOscuro ? 0.3 : 0.15,
                       ),
-                      const Spacer(),
-                      Text(
-                        widget.apunte.fecha,
-                        style: tema.textTheme.labelSmall?.copyWith(
-                          color: esOscuro ? Colors.white54 : Colors.black45,
-                        ),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        color: materia.colorInicio,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    widget.apunte.titulo,
-                    style: tema.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      apunte.ideasClave[i],
+                      style: tema.textTheme.bodyMedium?.copyWith(
+                        fontSize: 13.5,
+                        height: 1.45,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
-            // Selector interactivo de nivel de profundidad (SegmentedButton)
-            Center(
-              child: SegmentedButton<NivelResumen>(
-                segments: const [
-                  ButtonSegment<NivelResumen>(
-                    value: NivelResumen.corto,
-                    label: Text('Corto'),
-                    icon: Icon(Icons.flash_on_rounded, size: 16),
+          // Botones inferiores: Copiar y Crear Quiz
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    side: BorderSide(
+                      color: esOscuro ? Colors.white30 : Colors.black26,
+                    ),
                   ),
-                  ButtonSegment<NivelResumen>(
-                    value: NivelResumen.medio,
-                    label: Text('Medio'),
-                    icon: Icon(Icons.menu_book_rounded, size: 16),
+                  onPressed: () => _copiarAlPortapapeles(materia, apunte),
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text(
+                    'Copiar',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  ButtonSegment<NivelResumen>(
-                    value: NivelResumen.detallado,
-                    label: Text('Detallado'),
-                    icon: Icon(Icons.auto_awesome_rounded, size: 16),
-                  ),
-                ],
-                selected: _seleccionResumen,
-                onSelectionChanged: (nuevaSeleccion) {
-                  setState(() {
-                    _seleccionResumen = nuevaSeleccion;
-                  });
-                },
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Tarjeta con el texto del resumen generado
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: esOscuro
-                    ? AppColors.primario.withValues(alpha: 0.12)
-                    : const Color(0xFFF3EDF7),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppColors.primario
-                      .withValues(alpha: esOscuro ? 0.35 : 0.2),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.psychology_rounded,
-                        color: AppColors.primario,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Síntesis generada por IA',
-                        style: tema.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primario,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _textoResumenActual,
-                    style: tema.textTheme.bodyMedium?.copyWith(
-                      fontSize: 14.5,
-                      height: 1.55,
-                      color: esOscuro ? Colors.white : const Color(0xFF2B2533),
+              const SizedBox(width: 14),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primario,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 26),
-
-            // Sección de Ideas Clave (las 4 ideas de estudio)
-            Row(
-              children: [
-                const Icon(
-                  Icons.lightbulb_rounded,
-                  color: Color(0xFFFFA000),
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Ideas Clave (${widget.apunte.ideasClave.length})',
-                  style: tema.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            PrepararQuizScreen(materiaId: materia.id),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.quiz_rounded, size: 18),
+                  label: const Text(
+                    'Crear quiz',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Iteración de las ideas clave en tarjetas numeradas
-            for (var i = 0; i < widget.apunte.ideasClave.length; i++)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: esOscuro ? const Color(0xFF23202B) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: esOscuro
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.05),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black
-                          .withValues(alpha: esOscuro ? 0.25 : 0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: widget.materia.colorInicio
-                            .withValues(alpha: esOscuro ? 0.3 : 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${i + 1}',
-                        style: TextStyle(
-                          color: widget.materia.colorInicio,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        widget.apunte.ideasClave[i],
-                        style: tema.textTheme.bodyMedium?.copyWith(
-                          fontSize: 13.5,
-                          height: 1.45,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
-
-            const SizedBox(height: 24),
-
-            // Botones inferiores: Copiar y Crear Quiz
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      side: BorderSide(
-                        color: esOscuro ? Colors.white30 : Colors.black26,
-                      ),
-                    ),
-                    onPressed: _copiarAlPortapapeles,
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    label: const Text(
-                      'Copiar',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primario,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              QuizScreen(materia: widget.materia),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.quiz_rounded, size: 18),
-                    label: const Text(
-                      'Crear quiz',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
